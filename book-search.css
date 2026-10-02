@@ -1,0 +1,22 @@
+#workspace-search { flex-shrink: 0; white-space: nowrap; }
+#book-search-dialog { width: min(860px, calc(100vw - 40px)); height: min(700px, calc(100vh - 60px)); box-sizing: border-box; margin: auto; padding: 22px; border: 1px solid var(--ui-border); border-radius: 8px; color: var(--ui-text); background: var(--ui-bg); color-scheme: var(--ui-scheme); }
+#book-search-dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+#book-search-dialog::backdrop { background: #0009; }
+#book-search-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#book-search-dialog h2, #book-search-dialog p { margin: 0; }
+#book-search-dialog h2 { font: 24px Georgia, serif; }
+#book-search-description, #book-search-status { color: var(--ui-muted); font-size: 12px; overflow-wrap: anywhere; }
+.book-search-controls { display: flex; gap: 12px; }
+.book-search-controls label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; }
+.book-search-controls label:first-child { flex: 1; min-width: 0; }
+#book-search-dialog input, #book-search-dialog select, #book-search-dialog button { font: 13px Arial, sans-serif; background: var(--ui-panel); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 5px; padding: 9px 11px; }
+#book-search-dialog input { width: 100%; box-sizing: border-box; }
+#book-search-dialog :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#book-search-results { flex: 1; overflow: auto; min-height: 0; padding: 3px; }
+#book-search-dialog .book-search-result { display: block; width: 100%; margin-bottom: 9px; padding: 13px; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.book-search-result strong, .book-search-result small, .book-search-result span { display: block; line-height: 1.5; }
+.book-search-result span { margin-top: 5px; }
+.book-search-result small { color: var(--ui-muted); margin-top: 3px; }
+#book-search-dialog .book-search-result:hover { border-color: var(--accent); }
+#book-search-dialog mark { background: var(--ui-accent-soft); color: var(--ui-text); font-weight: bold; }
+@media (max-width: 620px) { .book-search-controls { flex-direction: column; } }

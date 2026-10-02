@@ -11,6 +11,18 @@ input, select, textarea { color: var(--ui-text); background: var(--ui-panel); bo
 #assistant-type { margin: 7px 0 20px; }
 #assistant-instructions { margin-top: 7px; resize: vertical; line-height: 1.6; }
 #assistant-status { color: var(--ui-text); }
+.ai-views { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.ai-views [aria-pressed="true"] { background: var(--ui-accent-soft); border-color: var(--accent); }
+.instruction-layout { display: grid; grid-template-columns: 185px minmax(0, 1fr); gap: 20px; }
+.instruction-list-pane { border-right: 1px solid var(--ui-border); padding-right: 12px; }
+#instruction-list { max-height: 480px; overflow-y: auto; margin-top: 14px; }
+#instruction-list button { width: 100%; text-align: left; overflow-wrap: anywhere; margin-bottom: 6px; }
+#instruction-list [aria-pressed="true"] { background: var(--ui-accent-soft); border-color: var(--accent); }
+.instruction-entry-actions { margin: 9px 0 17px; }
+#instruction-text { margin-top: 7px; line-height: 1.6; resize: vertical; min-height: 220px; }
+.instruction-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--ui-muted); margin-top: 6px; }
+#instruction-unsaved { color: var(--accent); }
+@media (max-width: 850px) { .instruction-layout { grid-template-columns: 145px minmax(0, 1fr); gap: 14px; } }
 input::placeholder { color: var(--ui-muted); }
 h1 { font: 28px Georgia, serif; margin: 13px 0 8px; }
 h2 { font: 30px Georgia, serif; margin: 9px 0; }
@@ -66,3 +78,5 @@ label > input, label > select { margin-top: 7px; }
 
 .response-settings { border-top: 1px solid var(--ui-border); margin-top: 16px; padding-top: 12px; }
 .response-settings summary { cursor: pointer; color: var(--accent); }
+
+#backup-path, #backup-status { overflow-wrap: anywhere; }

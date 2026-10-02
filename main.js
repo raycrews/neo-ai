@@ -2,7 +2,7 @@
 // Owns the window and all file-system access. The renderer talks to this
 // through the IPC handlers below (see preload.js for the exposed API).
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, utilityProcess, screen, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, utilityProcess, screen, nativeTheme, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -13,11 +13,22 @@ const paneWindows = installPaneWindows({ BrowserWindow, ipcMain, screen, readSet
 const { protectedStorage, legacySecretStore } = require('./protected-storage');
 const protector = protectedStorage(require('electron').safeStorage);
 const appearance = require('./appearance-main').installAppearance({ app, BrowserWindow, ipcMain, nativeTheme, readSettings, writeSettings });
+const backups = require('./backup-controls').backupControls({
+  dialog, shell, getLibraryPath: () => LIBRARY_DIR, flush: () => paneWindows.flush(),
+  openLibrary: async directory => {
+    validateLibraryTarget(directory);
+    await paneWindows.flush();
+    const settings = readSettings(true); settings.libraryDir = directory;
+    delete settings.initializeLibrary; writeSettings(settings);
+    app.relaunch(relaunchOptions()); app.exit(0);
+  }
+});
 const appSettings = require('./settings-window').installSettingsWindow({
   app, BrowserWindow, ipcMain, dialog, protector, getLibraryPath: () => LIBRARY_DIR,
-  browseLibrary: win => chooseLibraryFolder({ window: win, browse: true }), appearance
+  browseLibrary: win => chooseLibraryFolder({ window: win, browse: true }), appearance, backups
 });
 require('./ai-chat-main').installChat({ ipcMain, paneWindows, connections: appSettings.connections, assistants: appSettings.assistants, bookDir });
+const revision = require('./revision-main').installRevision({ ipcMain, paneWindows, connections: appSettings.connections, assistants: appSettings.assistants });
 
 // macOS Chromium's "smart delete" also removes whitespace around a deleted
 // selection, and that pass can duplicate characters. Deletes stay literal.
@@ -55,7 +66,7 @@ function writeSettings(obj) {
 // ---------------------------------------------------------------------------
 const NeoI18n = require('./i18n.js');
 const { t } = NeoI18n;
-require('./text-context-menu').installTextContextMenus({ app, BrowserWindow, Menu, t });
+require('./text-context-menu').installTextContextMenus({ app, BrowserWindow, Menu, t, revision });
 const LOCALES_DIR = path.join(__dirname, 'locales');
 let uiLanguage = 'en';
 
@@ -985,38 +996,9 @@ process.on('uncaughtException', (err) => logError('main', err));
 process.on('unhandledRejection', (err) => logError('main-promise', err));
 ipcMain.handle('log:error', (_e, msg) => logError('renderer', msg));
 
-// One zip of the whole library per day, keeping the last 14. Cheap insurance.
+// Daily archives share the same validated backup path as manual snapshots.
 async function dailyBackup() {
-  try {
-    ensureLibrary();
-    const backupsDir = path.join(LIBRARY_DIR, 'Backups');
-    if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-    const today = new Date().toISOString().slice(0, 10);
-    const target = path.join(backupsDir, `neo-backup-${today}.zip`);
-    if (fs.existsSync(target)) return;
-
-    const JSZip = require('jszip');
-    const zip = new JSZip();
-    const skip = new Set(['Backups', 'Exports']);
-    const walk = (dir, rel) => {
-      for (const name of fs.readdirSync(dir)) {
-        if (rel === '' && skip.has(name)) continue;
-        const full = path.join(dir, name);
-        const relPath = rel ? rel + '/' + name : name;
-        const stat = fs.statSync(full);
-        if (stat.isDirectory()) walk(full, relPath);
-        else zip.file(relPath, fs.readFileSync(full));
-      }
-    };
-    walk(LIBRARY_DIR, '');
-    fs.writeFileSync(target, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
-
-    // prune old backups
-    const backups = fs.readdirSync(backupsDir).filter((f) => f.startsWith('neo-backup-')).sort();
-    while (backups.length > 14) fs.unlinkSync(path.join(backupsDir, backups.shift()));
-  } catch (err) {
-    logError('backup', err);
-  }
+  try { await backups.daily(); } catch (err) { logError('backup', err); }
 }
 
 // ---------------------------------------------------------------------------
@@ -1244,15 +1226,7 @@ function buildMenu() {
             { label: t('Web Page (.html)'), click: () => sendToWindow({ type: 'export', format: 'html' }) },
             { label: 'PDF (.pdf)', click: () => sendToWindow({ type: 'export', format: 'pdf' }) },
             { label: 'Word (.docx)', click: () => sendToWindow({ type: 'export', format: 'docx' }) },
-            { label: 'EPUB (.epub)', click: () => sendToWindow({ type: 'export', format: 'epub' }) },
-            { type: 'separator' },
-            {
-              id: 'export-custom-chapter-titles',
-              label: t('Chapter Titles Only'),
-              type: 'checkbox',
-              checked: !!readJSON(LIBRARY_FILE, {}).exportCustomChapterTitles,
-              click: (item) => sendToWindow({ type: 'exportCustomChapterTitles', checked: item.checked })
-            }
+            { label: 'EPUB (.epub)', click: () => sendToWindow({ type: 'export', format: 'epub' }) }
           ]
         },
         { type: 'separator' },
@@ -1299,6 +1273,11 @@ function buildMenu() {
           label: isMac ? t('Find & Replace') : t('Find & Replace').replace(/&/g, '&&'),
           accelerator: 'CmdOrCtrl+F',
           click: () => sendToWindow({ type: 'find' })
+        },
+        {
+          label: 'Search book',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => sendToWindow({ type: 'searchBook' })
         },
         {
           label: t('Spellcheck Pass'),
@@ -1386,7 +1365,7 @@ function buildMenu() {
         { type: 'separator' },
         {
           label: t('Full Screen'),
-          accelerator: 'CmdOrCtrl+Shift+F',
+          accelerator: isMac ? 'Control+Command+F' : 'F11',
           click: () => {
             const w = BrowserWindow.getFocusedWindow();
             if (w) w.setFullScreen(!w.isFullScreen());

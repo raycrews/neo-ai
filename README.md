@@ -70,6 +70,47 @@ checks real right-click events and editing actions with an isolated library.
 
 ## AI Assistance chat
 
+### Instruction library
+
+Open **Settings → AI → Instruction library** to keep named instructions for
+models, genres, and writing tasks. Create, rename, duplicate, edit, or delete
+entries; each text box holds up to 200,000 characters. **Copy** copies the text
+currently in the editor. **Import .txt** opens UTF-8 text as a new draft, and
+**Export .txt** writes ordinary text with its original line breaks.
+
+Save an entry to keep it on this device. Library entries are separate from active
+assistant instructions: copy and paste the text where you want to use it. The
+destination field's normal size limit still applies. Device storage uses standard
+JSON in `instruction-library.json`; book backups exclude these device settings,
+so export text files to keep independent copies. Unsaved changes are protected
+when switching entries, closing Settings, or changing libraries.
+
+`npm run test:instruction-library` checks these controls with temporary settings,
+including persistence, plain-text round trips, and unchanged active instructions.
+
+### Revise selected text
+
+Select text in a manuscript scene, reference document, note, or outline, then
+right-click → **AI revision** →
+**Rewrite**, **Expand**, **Shorten**, or **Custom instruction**. Choose a saved
+connection and model, optionally add direction, and click **Generate**. The
+preview shows the original beside an editable proposal. **Accept replacement**
+replaces only the selection and supports normal Undo/Redo. **Try again** generates
+another proposal from the original selection; **Cancel** leaves the document
+unchanged. **Stop** cancels generation. A proposal cannot be accepted if its
+source passage changed while the preview was open.
+
+Each request includes the selected text and up to 2,000 characters on either side
+from that writing field. It uses the model's saved response settings. No other
+documents or chat history are included. Edit the four **Text revision** action
+instructions in **Settings → AI**. Revisions use the document's ordinary save
+format. The actions also work in the detached Outline window. **Darlings and
+AI Assistance chats are excluded**, including chat drafts and existing messages.
+`npm run test:revision` exercises this workflow with a temporary library and a
+mock provider.
+
+### Chat conversations
+
 Assistant replies render Markdown headings, bold/italic text, nested lists,
 quotes, code blocks, and tables in both chat windows, including saved replies.
 Copy places formatted HTML and readable plain text on the clipboard, so pasting
@@ -376,15 +417,43 @@ Daily word goals, word sprints, and a NaNoWriMo-style progress chart. Needs more
 
 **Exports** 
 
+Choose a format under **File → Export**, then select the documents to include.
+Manuscript documents are selected by default; reference documents can be added.
+Export follows sidebar order. By default, top-level manuscript folders become
+chapters and their documents become scenes, separated by `***`. Choose document
+titles or no headings instead, and review the export order before saving.
+HTML, PDF, Word and EPUB preserve headings, emphasis, underline, strikethrough,
+lists, alignment and line breaks. Markdown preserves supported text formatting;
+plain text retains the words, list markers and scene breaks. AI chats keep their
+separate **Export chat** action.
+
+For PDF and Word, enable **Page numbers** in the export dialog to add centered
+footer numbers. Numbering starts at 1 on the first exported chapter; the cover
+and title page remain unnumbered. Leave the checkbox off for an unnumbered copy.
+
+**Chapter numbering** offers **As named**, **Arabic (1, 2, 3)** and **Roman
+(I, II, III)** for every export format. Arabic and Roman numbering follow the
+selected manuscript chapters from 1, replacing existing “Chapter 2” or “Chapter
+II” prefixes while preserving subtitles. Reference document titles and saved
+workspace names stay unchanged. **No headings** disables chapter numbering.
+
 EPUB 3 with a proper table of contents built to KDP's guidelines, Word .docx, PDF, HTML, markdown, and plain text. Email a timestamped PDF snapshot to yourself with a SHA-256 fingerprint of the text in the body. Might come in handy someday.
 
 **Import** 
 
 Bring in existing .docx, .txt, and .md manuscripts; chapters and scene breaks are detected automatically. This is still a bit rough and might require you to tweak things. It will try to grab your title and remove that from the body, and it seems to be working okay.
 
+**Search book**
+
+Use **Search book** in the workspace toolbar, or **Ctrl+Shift+F** (**Cmd+Shift+F** on Mac), to find a word or phrase across the current book. Results show the document path and matching text, with a section filter. Search includes manuscript and reference documents, Notes, outline notes, Darlings and original AI chat messages, including messages retained after compaction. AI context exclusions do not affect search. Select a result to open its document or jump to its chat message; detached chats stay in their own window. Search runs locally and sends no content to an AI provider. Reopen search to refresh it after edits. **Ctrl/Cmd+F** keeps the existing manuscript Find & Replace.
+
 **Backups** 
 
-Continuous autosave, daily zip backups kept for two weeks, everything stored as plain files. Set up your NEO library folder on your iCloud if you want for extra safety. You can also email copies of your WIP to yourself with a keystroke: ⌘E.
+Neo-AI autosaves your work and creates a daily ZIP of the library at startup, retaining the last 14 daily archives. In **Settings → General → Backups**, use **Back up now** to save open documents and chats and create a manual snapshot. This stops any AI reply in progress, keeping its partial text. Manual snapshots remain until you remove them. The panel shows the latest backup and its folder, with an **Open backup folder** button.
+
+**Restore backup…** validates a library ZIP and previews its books before asking where to create a separate recovered library folder. **Open recovered library** saves your current work and restarts there; your original library remains intact. You can switch back using **Library folder → Browse…**. Restored documents and chats use the same ordinary HTML and JSON files as the original library.
+
+Backups exclude the Backups and Exports folders and device settings/API keys. They support libraries up to 1 GB and 50,000 files. Copy important ZIPs to another drive for protection against drive failure. You can also email copies of your WIP to yourself with a keystroke: ⌘E.
 
 ## Your files
 

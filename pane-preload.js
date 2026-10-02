@@ -1,4 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld('neoRevisionAPI', {
+  connections: () => ipcRenderer.invoke('revision:connections'),
+  generate: input => ipcRenderer.invoke('revision:generate', input),
+  cancel: requestId => ipcRenderer.invoke('revision:cancel', requestId),
+  onOpen: callback => ipcRenderer.on('revision:open', (_event, action) => callback(action))
+});
 contextBridge.exposeInMainWorld('neoAppearance', {
   read: () => ipcRenderer.invoke('appearance:read'),
   onChange: callback => ipcRenderer.on('appearance:changed', (_event, value) => callback(value))

@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const { atomicJSON } = require('./protected-storage');
-const types = require('./assistant-types');
+const types = [...require('./assistant-types'), ...require('./revision-actions').map(action => ({
+  ...action, id: 'edit-' + action.id, name: 'Text revision — ' + action.name, group: 'revision'
+}))];
 class AssistantPreferences {
   constructor(file, write = atomicJSON) { this.file = file; this.write = write; }
   read() {

@@ -2,11 +2,14 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { Connections } = require('./ai-connections');
 const { AssistantPreferences } = require('./assistant-preferences');
+const { InstructionLibrary, readInstructionText, validateEntry } = require('./instruction-library');
+const fs = require('node:fs');
 
-function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector, getLibraryPath, browseLibrary, appearance }) {
+function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector, getLibraryPath, browseLibrary, appearance, backups }) {
   let window = null;
   const jobs = new Map();
   const assistants = new AssistantPreferences(() => path.join(app.getPath('userData'), 'ai-assistants.json'));
+  const instructionLibrary = new InstructionLibrary(() => path.join(app.getPath('userData'), 'instruction-library.json'));
   const connections = new Connections({ file: () => path.join(app.getPath('userData'), 'ai-connections.json'), protector });
   const url = pathToFileURL(path.join(__dirname, 'settings.html')).href;
   function trusted(event) {
@@ -21,10 +24,35 @@ function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector,
   }
   handle('settings:read', () => ({ ...connections.snapshot(), version: app.getVersion(), libraryPath: getLibraryPath() }));
   handle('settings:browseLibrary', () => browseLibrary(window));
+  handle('settings:backupStatus', () => backups.status());
+  handle('settings:backupNow', () => backups.create());
+  handle('settings:backupFolder', () => backups.showFolder());
+  handle('settings:restoreBackup', () => backups.restore(window));
+  handle('settings:openRestored', () => backups.openRestored());
   handle('settings:appearance', (_event, value) => appearance.save(value));
   const contextChanged = () => { for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.webContents.send('chat:contextChanged'); };
   handle('settings:save', (_event, data) => { const result = connections.save(data); contextChanged(); return result; });
   handle('settings:assistants', () => assistants.snapshot());
+  handle('settings:instructionLibrary', () => instructionLibrary.read());
+  handle('settings:saveInstruction', (_event, data) => instructionLibrary.save(data));
+  handle('settings:deleteInstruction', (_event, id) => instructionLibrary.remove(id));
+  handle('settings:importInstruction', async () => {
+    const result = await dialog.showOpenDialog(window, { title: 'Import instructions', properties: ['openFile'], filters: [{ name: 'Plain text', extensions: ['txt'] }] });
+    if (result.canceled || !result.filePaths.length) return null;
+    const file = result.filePaths[0];
+    return { name: path.basename(file, path.extname(file)).slice(0, 120), text: readInstructionText(file) };
+  });
+  handle('settings:exportInstruction', async (_event, data) => {
+    validateEntry(data);
+    let name = data.name.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, '-').replace(/[. ]+$/, '') || 'Instructions';
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) name = 'Instructions-' + name;
+    const result = await dialog.showSaveDialog(window, { title: 'Export instructions', defaultPath: name + '.txt', filters: [{ name: 'Plain text', extensions: ['txt'] }] });
+    if (result.canceled || !result.filePath) return false;
+    const temp = result.filePath + '.' + require('node:crypto').randomUUID() + '.tmp';
+    try { fs.writeFileSync(temp, data.text, { encoding: 'utf8', flag: 'wx' }); fs.renameSync(temp, result.filePath); }
+    finally { if (fs.existsSync(temp)) fs.unlinkSync(temp); }
+    return true;
+  });
   handle('settings:saveAssistant', (_event, data) => { const result = assistants.save(data); contextChanged(); return result; });
   handle('settings:remove', (_event, id) => { const result = connections.remove(id); contextChanged(); return result; });
   handle('settings:test', async (event, id, kind) => {

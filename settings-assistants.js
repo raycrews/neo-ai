@@ -26,7 +26,7 @@
     saving = true; controls(); status.textContent = 'Saving…';
     try {
       types = await window.settingsAPI.saveAssistant({ id: selected, instructions: editor.value });
-      render(); status.textContent = 'Instructions saved. They will be used on the next message.';
+      render(); status.textContent = 'Instructions saved. They will be used on the next message or revision.';
     } catch (error) { status.textContent = error.message; }
     finally { saving = false; controls(); }
   };

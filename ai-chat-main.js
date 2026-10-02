@@ -32,6 +32,15 @@ function installChat({ ipcMain, paneWindows, connections, assistants, bookDir })
     });
   }
   handle('chat:read', id => store.action(id, { type: 'syncNavigation' }));
+  handle('chat:searchSnapshot', id => store.state(id).conversations.map(c => ({
+    id: c.id, title: c.title, navigationLinked: c.navigationLinked,
+    messages: c.messages.map(m => ({ id: m.id, role: m.role, content: m.content }))
+  })));
+  handle('chat:reveal', (bookId, id, messageId) => {
+    const c = store.state(bookId).conversations.find(c => c.id === id);
+    if (!c?.messages.some(m => m.id === messageId)) return false;
+    paneWindows.send('chat:reveal', { bookId, id, messageId }); return true;
+  });
   handle('chat:context', context);
   handle('chat:budget', (bookId, id, draft, preview) => store.inspect(bookId, id, draft, preview));
   handle('chat:limit', (_bookId, profileId, model, limit) => {

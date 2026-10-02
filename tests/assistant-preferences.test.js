@@ -9,7 +9,9 @@ test('assistant instructions have defaults, persist independently, and reject da
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = () => path.join(dir, 'ai-assistants.json');
   const prefs = new AssistantPreferences(file);
-  const defaults = prefs.snapshot(); assert.equal(defaults.length, 6);
+  const defaults = prefs.snapshot(); assert.equal(defaults.length, 10);
+  prefs.save({ id: 'edit-rewrite', instructions: 'Preserve the narrator’s dry humor.' });
+  assert.equal(new AssistantPreferences(file).instructions('edit-rewrite'), 'Preserve the narrator’s dry humor.');
   prefs.save({ id: 'characters', instructions: 'Ask about character motivations.' });
   assert.equal(new AssistantPreferences(file).instructions('characters'), 'Ask about character motivations.');
   assert.equal(prefs.instructions('plot'), defaults.find(t => t.id === 'plot').instructions);

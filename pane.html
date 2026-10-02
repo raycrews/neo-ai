@@ -7,6 +7,7 @@
   <title>Outline — Neo-AI</title>
   <link rel="stylesheet" href="pane.css">
   <link rel="stylesheet" href="appearance.css">
+  <link rel="stylesheet" href="manuscript-revision.css">
   <script src="appearance.js" defer></script>
 </head>
 <body class="outline-pane">
@@ -15,5 +16,7 @@
   <section id="error-box" hidden role="alert"><p id="error"></p><label for="recovery">Unsaved draft — copy before discarding</label><textarea id="recovery" readonly></textarea><button id="retry" type="button">Apply my draft over latest text</button><button id="discard" type="button">Discard unsaved edits</button></section>
   <main id="outline"><p class="empty">Open a book to see its chapters and sections here.</p></main>
   <script src="pane.js"></script>
+  <script src="revision-actions.js"></script>
+  <script src="manuscript-revision.js"></script>
 </body>
 </html>

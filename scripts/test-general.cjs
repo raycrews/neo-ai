@@ -71,6 +71,42 @@ app.whenReady().then(async () => {
   await evaluate(win, 'document.querySelector("[data-page=general]").click();document.querySelector("#appearance-defaults").click()');
   await until(() => settings().appearance?.accent === '#c9a86a' && evaluate(win, 'document.querySelector("#appearance-status").textContent === "Appearance saved."'), 'defaults saved');
   assert.equal(settings().appearance.theme, 'dark');
+  // Manual backups flush the live document, then restore a separate library.
+  const { readBackup } = require('../library-backups');
+  await until(async () => !(await evaluate(win, 'window.settingsAPI.backupStatus()')).working, 'startup backup');
+  await evaluate(owner, `(() => {const editor=document.querySelector('.tree-document-text');editor.textContent='Latest edit captured in backup';editor.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+  await evaluate(win, 'document.querySelector("#backup-now").click()');
+  await until(() => evaluate(win, 'document.querySelector("#backup-status").textContent === "Backup saved."'), 'manual backup');
+  const backupState = await evaluate(win, 'window.settingsAPI.backupStatus()');
+  const archive = path.join(backupState.directory, backupState.latest.name);
+  const contents = await readBackup(archive);
+  assert.equal(JSON.parse(contents.files.get('book-one/book.json')).workspaceTree.characters[0].text, 'Latest edit captured in backup');
+  assert.ok(contents.files.has('book-one/ai-chats.json'));
+  await evaluate(win, 'document.querySelector("#backups-card").scrollIntoView({block:"center"})');
+  await screenshot(win, 'general-backups');
+  const savedPicker = dialog.showOpenDialog, savedMessage = dialog.showMessageBox, savedExit = app.exit, savedRelaunch = app.relaunch;
+  let preview = null, restoredRestart = false;
+  try {
+    dialog.showOpenDialog = async (_win, options) => ({ filePaths: [options.properties.includes('openFile') ? archive : scratch] });
+    dialog.showMessageBox = async (_win, options) => { preview = options; return { response: 1 }; };
+    app.relaunch = () => { restoredRestart = true; }; app.exit = () => {};
+    await evaluate(win, 'document.querySelector("#backup-restore").click()');
+    await until(() => evaluate(win, '!document.querySelector("#backup-open-restored").hidden && !document.querySelector("#backup-restore").disabled'), 'restore finished');
+    assert.match(preview.detail, /Under the Stars/);
+    assert.equal(settings().libraryDir, libraryDir); assert.equal(restoredRestart, false);
+    const recovered = (await evaluate(win, 'window.settingsAPI.backupStatus()')).restored;
+    assert.notEqual(recovered, libraryDir);
+    assert.deepEqual(fs.readFileSync(path.join(recovered, 'book-one/ai-chats.json')), contents.files.get('book-one/ai-chats.json'));
+    await evaluate(owner, `(() => {const editor=document.querySelector('.tree-document-text');editor.textContent='Current work preserved before recovery';editor.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    await evaluate(win, 'document.querySelector("#backup-open-restored").click()');
+    await until(() => restoredRestart, 'recovered library restart');
+    assert.equal(settings().libraryDir, recovered);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(libraryDir, 'book-one/book.json'))).workspaceTree.characters[0].text, 'Current work preserved before recovery');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(recovered, 'book-one/book.json'))).workspaceTree.characters[0].text, 'Latest edit captured in backup');
+    // Simulated relaunch leaves the test owner in its original library.
+    fs.writeFileSync(path.join(device, 'settings.json'), JSON.stringify({ ...settings(), libraryDir }));
+    await until(() => evaluate(win, '!document.querySelector("#backup-open-restored").disabled'), 'restore action settled');
+  } finally { dialog.showOpenDialog = savedPicker; dialog.showMessageBox = savedMessage; app.exit = savedExit; app.relaunch = savedRelaunch; }
   // Browse is cancelable, validates first, blocks unsaved settings and flushes books.
   const originalPicker = dialog.showOpenDialog, originalExit = app.exit, originalRelaunch = app.relaunch;
   let restart = null, exit = null, picked = null, calls = 0;
@@ -92,7 +128,7 @@ app.whenReady().then(async () => {
     assert.equal(fs.readdirSync(nextLibrary).length, 0); // Selection has not migrated or overwritten any files.
   } finally { dialog.showOpenDialog = originalPicker; app.exit = originalExit; app.relaunch = originalRelaunch; }
   assert.deepEqual(errors, []);
-  console.log('PASS: themes, accents, system changes, all windows, independent paper, persistence/defaults, failed saves, Browse cancellation/validation and saved edits before restart.');
+  console.log('PASS: themes, accents, system changes, all windows, independent paper, persistence/defaults, failed saves, backup/restore with live edits and preserved originals, Browse cancellation/validation and saved edits before restart.');
   console.log('Screenshots: ' + scratch); app.exit(0);
 }).catch(error => { console.error(error); console.error(errors); app.exit(1); });
 setTimeout(() => { console.error('General settings test timed out'); app.exit(1); }, 90000).unref();

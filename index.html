@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="ai-chat.css" />
   <link rel="stylesheet" href="appearance.css" />
   <script src="appearance.js" defer></script>
+  <link rel="stylesheet" href="book-search.css">
+  <link rel="stylesheet" href="manuscript-export.css">
+  <link rel="stylesheet" href="manuscript-revision.css">
 </head>
 <body>
   <!-- Draggable strip so the frameless window can be moved -->
@@ -158,6 +161,7 @@
       <button id="workspace-nav-toggle" aria-controls="nav-pane" aria-expanded="true" title="Hide navigation">&#9776;</button>
       <span id="workspace-section-label">Manuscript</span>
       <div id="document-formatting" role="toolbar" aria-label="Text formatting" hidden></div>
+      <button id="workspace-search" title="Search this book (Ctrl+Shift+F)">Search book</button>
       <button id="workspace-comments-toggle" aria-controls="side-pane" aria-pressed="false">Notes &amp; Comments</button>
     </header>
 
@@ -238,6 +242,7 @@
   <script src="workspace-tree-model.js"></script>
   <script src="chat-context.js"></script>
   <script src="document-rich-text.js"></script>
+  <script src="export-text.js"></script>
   <script src="app.js"></script>
   <script src="workspace-navigation.js"></script>
   <script src="workspace-tree.js"></script>
@@ -252,5 +257,11 @@
   <script src="ai-context-picker.js"></script>
   <script src="workspace-ai.js"></script>
   <script src="document-toolbar.js"></script>
+  <script src="book-search.js"></script>
+  <script src="workspace-search.js"></script>
+  <script src="manuscript-export.js"></script>
+  <script src="workspace-export.js"></script>
+  <script src="revision-actions.js"></script>
+  <script src="manuscript-revision.js"></script>
 </body>
 </html>

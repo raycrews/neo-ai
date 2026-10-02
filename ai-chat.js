@@ -15,6 +15,10 @@
       this.bookId = null; this.state = null; this.profiles = [];
       this.pending = Promise.resolve(); this.draftTimer = null; this.summaryTimer = null; this.requestBusy = false;
       this.formattedMessages = new Map();
+      window.neoChat.onReveal?.(target => {
+        if (target.bookId !== this.bookId) return;
+        this.searchHighlight = target; this.searchReveal = target; this.revealSearchMessage();
+      });
       root.setAttribute('aria-label', 'AI Assistance');
       if (detach) this.detachButton = button('Open in separate window', detach);
       if (dock) this.dockButton = button('Return to workspace', dock);
@@ -246,6 +250,16 @@
       if (!c?.preview || this.detached || c.preview.status !== 'complete' || this.summaryText.value === c.preview.text) return this.pending;
       return this.enqueue({ type: 'previewEdit', id: c.id, text: this.summaryText.value });
     }
+    revealSearchMessage() {
+      const target = this.searchReveal;
+      if (!target || this.current()?.id !== target.id) return;
+      const card = [...this.transcript.children].find(el => el.dataset.messageId === target.messageId);
+      if (!card) return;
+      this.searchReveal = null;
+      card.classList.add('ai-search-match');
+      this.transcript.scrollTop = card.offsetTop - this.transcript.offsetTop;
+      card.tabIndex = -1; card.focus({ preventScroll: true });
+    }
     async flushEdits() {
       await this.saveDraft(); await this.saveSummary(); await this.pending;
       if (this.saveFailure) { const error = this.saveFailure; this.saveFailure = null; throw error; }
@@ -356,6 +370,8 @@
       if (!c.messages.length) this.transcript.append(element('p', 'ai-empty', 'Start a conversation about your story. Use Choose context to attach manuscript or reference documents to this chat.'));
       for (const [index, message] of c.messages.entries()) {
         const card = element('article', 'ai-message ai-' + message.role);
+        card.dataset.messageId = message.id;
+        if (this.searchHighlight?.id === c.id && this.searchHighlight.messageId === message.id) card.classList.add('ai-search-match');
         const meta = element('div', 'ai-message-meta');
         meta.append(element('strong', '', message.role === 'user' ? 'You' : 'Assistant'),
           element('span', '', [index <= boundary ? 'Included in summary' : '', message.status === 'streaming' ? 'Writing…' : message.status === 'stopped' ? 'Stopped · partial reply' : message.model || ''].filter(Boolean).join(' · ')));
@@ -392,6 +408,7 @@
         this.transcript.append(card);
       }
       if (bottom) this.transcript.scrollTop = this.transcript.scrollHeight;
+      this.revealSearchMessage();
       if (this.state.job) this.status.textContent = this.state.job.kind === 'compact' ? 'Creating a summary…' : 'Writing a reply…';
       else if (c.error) this.error(new Error(c.error));
       else if (['Writing a reply…', 'Creating a summary…'].includes(this.status.textContent)) this.status.textContent = c.preview ? 'Summary ready for review.' : 'Conversation saved.';

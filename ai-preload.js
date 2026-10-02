@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('neoAppearance', {
   onChange: callback => ipcRenderer.on('appearance:changed', (_event, value) => callback(value))
 });
 contextBridge.exposeInMainWorld('neoChat', {
+  onReveal: callback => ipcRenderer.on('chat:reveal', (_event, value) => callback(value)),
   read: id => ipcRenderer.invoke('chat:read', id),
   context: id => ipcRenderer.invoke('chat:context', id),
   budget: (bookId, id, draft, preview) => ipcRenderer.invoke('chat:budget', bookId, id, draft, preview),

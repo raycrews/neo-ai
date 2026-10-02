@@ -516,7 +516,7 @@ body.focus-mode:not(.no-dropcap) .chapter-body.focus-cap:not(.cap-off) p:not(.po
    cap. Consecutive lines make one block; the block breathes above and below.
    The italic is real markup, laid in when the paragraph is made, so ⌘I
    takes it off any word the writer wants roman. */
-.chapter-body p.poetry { margin: 0 2.5em; text-indent: 0; }
+.chapter-body p.poetry { margin: 0 2.5em; text-indent: 0; white-space: pre-wrap; tab-size: 4; }
 .chapter-body p:not(.poetry) + p.poetry { margin-top: 0.9em; }
 .chapter-body p.poetry + p:not(.poetry) { margin-top: 0.9em; }
 /* cap-off while the caret is in the first paragraph: the rule must stop

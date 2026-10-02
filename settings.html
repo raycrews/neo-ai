@@ -24,6 +24,13 @@
       <span class="eyebrow">APPLICATION</span><h2>General</h2>
       <p class="intro">Choose your library and personalize this device.</p>
       <div class="info-card"><div class="general-heading"><h3>Library folder</h3><button id="browse-library" type="button">Browse…</button></div><p id="library-path"></p><p class="muted">Open an existing library or choose an empty folder for a new one. Neo-AI saves your work and restarts there. Your current books stay in their current folder.</p><p id="library-status" role="status"></p></div>
+      <div class="info-card" id="backups-card"><h3>Backups</h3>
+        <p id="backup-latest">Checking backups…</p><p id="backup-path" class="hint"></p>
+        <div class="form-actions"><button id="backup-now" type="button">Back up now</button><button id="backup-folder" type="button">Open backup folder</button><button id="backup-restore" type="button">Restore backup…</button></div>
+        <p class="hint">Back up now saves open work and stops any AI reply in progress. A daily ZIP is created when Neo-AI starts. The last 14 daily backups are kept; manual backups stay until you remove them. Backups include books and chats. Exports and device preferences, including API keys, are excluded.</p>
+        <p class="hint">Restore creates a separate library folder. Keep a copy of your backups on another drive for protection if this drive fails.</p>
+        <p id="backup-status" role="status" aria-live="polite"></p><button id="backup-open-restored" type="button" hidden>Open recovered library</button>
+      </div>
       <div class="info-card"><h3>Appearance</h3>
         <label for="appearance-theme">Theme</label><select id="appearance-theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Follow system</option></select>
         <label id="accent-label">Accent color</label><div id="accent-swatches" role="group" aria-labelledby="accent-label"></div>
@@ -34,19 +41,45 @@
       <p id="app-version" class="muted"></p>
     </section>
     <section id="ai" hidden>
-      <span class="eyebrow">AI</span><h2>Assistant instructions</h2>
-      <p class="intro">Set how each assistant helps you. Choose the assistant type in each chat.</p>
+      <span class="eyebrow">AI</span><h2>Instructions</h2>
+      <div class="ai-views" role="group" aria-label="AI instruction settings"><button data-ai-view="active-instructions" aria-pressed="true">Assistant instructions</button><button data-ai-view="instruction-library" aria-pressed="false">Instruction library</button></div>
+      <div id="active-instructions">
+      <p class="intro">Set instructions for chat assistants and text revisions.</p>
       <form id="assistant-form">
         <fieldset id="assistant-fields" disabled>
-          <label for="assistant-type">Assistant type</label><select id="assistant-type"></select>
+          <label for="assistant-type">Assistant or revision action</label><select id="assistant-type"></select>
           <label for="assistant-instructions">Purpose-specific instructions</label>
           <textarea id="assistant-instructions" rows="14" maxlength="12000" required aria-describedby="assistant-help"></textarea>
-          <p id="assistant-help" class="hint">Saved on this device. Changes apply to the next message in all chats using this assistant type. Chat history and chosen context stay with each chat. These instructions do not grant access to additional documents or tools.</p>
+          <p id="assistant-help" class="hint">Saved on this device. Changes apply to the next message or text revision using these instructions. Revision actions use the selected passage and nearby text. Chat history and chosen context stay with each chat.</p>
           <div class="form-actions"><button type="submit" class="primary" id="save-assistant">Save instructions</button><button type="button" id="revert-assistant">Revert</button><button type="button" id="restore-assistant">Restore default</button></div>
           <p class="hint">Restore default fills the editor. Save instructions to apply it.</p>
         </fieldset>
       </form>
       <p id="assistant-status" role="status" aria-live="polite"></p>
+      </div>
+      <div id="instruction-library" hidden>
+        <p class="intro">Keep reusable instructions for models, genres, and writing tasks. Copy an entry when you want to use it.</p>
+        <div class="instruction-layout">
+          <aside class="instruction-list-pane">
+            <div class="form-actions"><button id="instruction-new" disabled>+ New</button><button id="instruction-import" disabled>Import .txt…</button></div>
+            <p id="instruction-empty" class="hint">No saved entries yet.</p>
+            <div id="instruction-list" role="group" aria-label="Saved instructions"></div>
+          </aside>
+          <form id="instruction-form">
+            <fieldset id="instruction-fields" disabled>
+              <label>Name<input id="instruction-name" maxlength="120" required placeholder="e.g. Mystery — Character development"></label>
+              <div class="form-actions instruction-entry-actions"><button type="button" id="instruction-rename">Rename</button><button type="button" id="instruction-duplicate">Duplicate</button><button type="button" id="instruction-delete" class="danger">Delete</button></div>
+              <label for="instruction-text">Instructions</label>
+              <textarea id="instruction-text" rows="15" maxlength="200000" aria-describedby="instruction-help" placeholder="Write or paste instructions here…"></textarea>
+              <div class="instruction-meta"><span id="instruction-count">0 / 200,000 characters</span><span id="instruction-unsaved" hidden>Unsaved changes</span></div>
+              <p id="instruction-help" class="hint">Saving keeps this entry in your library. To use it, copy and paste into an assistant’s instructions or a revision’s Additional instructions.</p>
+              <div class="form-actions"><button type="submit" id="instruction-save" class="primary">Save entry</button><button type="button" id="instruction-revert">Revert</button><button type="button" id="instruction-copy">Copy</button><button type="button" id="instruction-export">Export .txt…</button></div>
+            </fieldset>
+          </form>
+        </div>
+        <p id="instruction-status" role="status" aria-live="polite"></p>
+        <p class="hint">Saved on this device, separately from books and active assistant instructions. Export entries as ordinary text files to back them up or use them elsewhere. Book backups exclude this library.</p>
+      </div>
     </section>
     <section id="connections">
       <span class="eyebrow">AI</span><h2>Connections</h2>
@@ -75,7 +108,7 @@
                 <p id="model-empty" class="hint" hidden></p>
                 <p class="hint">Select a model, then Save connection.</p>
               </section>
-              <details id="response-settings" class="response-settings">
+              <details id="response-settings" class="response-settings" open>
                 <summary>Response settings</summary>
                 <p class="hint" id="response-model-label"></p>
                 <fieldset id="response-fields">
@@ -103,6 +136,7 @@
   </main>
   <script src="settings.js"></script>
   <script src="settings-assistants.js"></script>
+  <script src="settings-instruction-library.js"></script>
   <script src="settings-general.js"></script>
 </body>
 </html>

@@ -59,6 +59,10 @@ async function openWorkspaceChat(section, node) {
     if (book?.id !== bookId || workspaceSelection?.id !== node.id) return;
     await view.run({ type: 'select', id: node.conversationId });
     if (view.detached) await window.neo.openPane('ai-assistance');
+    if (view.searchTarget?.id === node.conversationId) {
+      const target = view.searchTarget; view.searchTarget = null;
+      await window.neoChat.reveal(bookId, target.id, target.messageId);
+    }
   } catch (error) { toast(error.message, 7000); }
   finally { if (window.neoChatView.openingChatId === node.id) window.neoChatView.openingChatId = null; renderWorkspaceTrees(); }
 }

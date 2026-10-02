@@ -1,0 +1,17 @@
+#manuscript-revision { color: var(--ui-text); background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 8px; padding: 22px; width: min(1040px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; margin: auto; font: 13px/1.5 Arial, sans-serif; }
+#manuscript-revision::backdrop { background: #0009; }
+#manuscript-revision header, #manuscript-revision footer { display: flex; align-items: center; gap: 10px; }
+#manuscript-revision h2 { margin: 0; font: 24px Georgia, serif; flex: 1; }
+#manuscript-revision button, #manuscript-revision input, #manuscript-revision select, #manuscript-revision textarea { font: inherit; color: var(--ui-text); background: var(--ui-panel); border: 1px solid var(--ui-border); border-radius: 4px; padding: 8px 10px; }
+#manuscript-revision button { cursor: pointer; }
+#manuscript-revision :disabled { opacity: .5; cursor: default; }
+#manuscript-revision :focus-visible { outline: 2px solid var(--ui-accent-fill); outline-offset: 2px; }
+#manuscript-revision label { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+#manuscript-revision .revision-controls { display: grid; grid-template-columns: 1fr 1.2fr 1.6fr auto; align-items: end; gap: 10px; margin-top: 18px; }
+#manuscript-revision .revision-hint { color: var(--ui-muted); }
+#manuscript-revision .revision-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+#manuscript-revision .revision-comparison textarea { height: clamp(180px, 35vh, 440px); resize: vertical; font: 15px/1.6 Georgia, serif; }
+#manuscript-revision [data-status] { min-height: 1.5em; }
+#manuscript-revision [data-count] { flex: 1; }
+#manuscript-revision [data-accept] { background: var(--ui-accent-fill); color: var(--ui-accent-ink); }
+@media (max-width: 700px) { #manuscript-revision .revision-controls, #manuscript-revision .revision-comparison { grid-template-columns: 1fr; } }

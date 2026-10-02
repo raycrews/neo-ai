@@ -52,7 +52,7 @@ app.whenReady().then(async () => {
   const edit = async (selector, value) => evaluate(win, `(() => {const field=document.querySelector(${JSON.stringify(selector)}); field.value=${JSON.stringify(value)}; field.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   const click = selector => evaluate(win, `document.querySelector(${JSON.stringify(selector)}).click()`);
   await click('[data-page="ai"]');
-  await until(() => evaluate(win, 'document.querySelector("#assistant-type").options.length === 6'), 'assistant instructions');
+  await until(() => evaluate(win, 'document.querySelector("#assistant-type").options.length === 10'), 'assistant instructions');
   await edit('#assistant-type', 'characters');
   await evaluate(win, 'document.querySelector("#assistant-type").dispatchEvent(new Event("change"))');
   await edit('#assistant-instructions', 'Ask about character motivations.');
@@ -132,7 +132,7 @@ app.whenReady().then(async () => {
   win.close(); await until(() => !settingsWindow(), 'close');
   await evaluate(owner, 'window.neo.openSettings()'); await until(() => !!settingsWindow(), 'reopen'); win = settingsWindow();
   await until(() => evaluate(win, 'typeof loaded !== "undefined" && loaded'), 'reopened data');
-  await until(() => evaluate(win, 'document.querySelector("#assistant-type").options.length === 6'), 'reopened instructions');
+  await until(() => evaluate(win, 'document.querySelector("#assistant-type").options.length === 10'), 'reopened instructions');
   await evaluate(win, 'document.querySelector("#assistant-type").value="characters"; document.querySelector("#assistant-type").dispatchEvent(new Event("change"));');
   assert.equal(await evaluate(win, 'document.querySelector("#assistant-instructions").value'), 'Ask about character motivations.');
   assert.equal(await evaluate(win, 'document.querySelector("#profile-name").value'), 'Writing server');

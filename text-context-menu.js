@@ -1,11 +1,13 @@
 // Native editing actions preserve the same rich clipboard data and undo behavior
 // as keyboard shortcuts. Install for every window, including detached panes.
-function installTextContextMenus({ app, BrowserWindow, Menu, t }) {
+function installTextContextMenus({ app, BrowserWindow, Menu, t, revision }) {
   app.on('web-contents-created', (_event, contents) => {
-    contents.on('context-menu', (_event, params) => {
+    contents.on('context-menu', async (_event, params) => {
       const window = BrowserWindow.fromWebContents(contents);
       if (!window || window.isDestroyed()) return;
       const template = textMenuTemplate(params, t);
+      if (revision) template.push(...await revision.menu(contents, params).catch(() => []));
+      if (window.isDestroyed()) return;
       if (!template.length) return;
       Menu.buildFromTemplate(template).popup({
         window, frame: params.frame || undefined,

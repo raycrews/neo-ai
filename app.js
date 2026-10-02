@@ -3201,6 +3201,9 @@ function outlineLine(kind, chId, secId, index, label, text) {
 
   // right-click any outline line to delete it
   line.addEventListener('contextmenu', async (e) => {
+    // Selected note text uses native editing and AI revision actions.
+    const selection = window.getSelection();
+    if (!selection.isCollapsed && txt.contains(selection.anchorNode) && txt.contains(selection.focusNode)) return;
     e.preventDefault();
     if (kind === 'chapter') {
       const i = book.chapterOrder.indexOf(chId);
@@ -5001,6 +5004,7 @@ function shortcutSections() {
       [K('⌘⌥⇧V', 'Ctrl+Shift+V'), 'Paste and match style'],
       [K('⌘A', 'Ctrl+A'), 'Select all'],
       [K('⌘F', 'Ctrl+F'), 'Find and replace'],
+      [K('⌘⇧F', 'Ctrl+Shift+F'), 'Search book'],
       [K('⌘;', 'Ctrl+;'), 'Toggle spellcheck pass']
     ] },
     { title: 'App & files', rows: [
@@ -5010,7 +5014,7 @@ function shortcutSections() {
       [K('⌘E', 'Ctrl+E'), 'Email a draft to yourself']
     ] },
     { title: 'View & window', rows: [
-      [[K('⌘⇧F', 'Ctrl+Shift+F'), K('⌘Enter', 'Ctrl+Enter')], 'Toggle full screen'],
+      [[K('⌃⌘F', 'F11'), K('⌘Enter', 'Ctrl+Enter')], 'Toggle full screen'],
       [K('⌘⇧T', 'Ctrl+Shift+T'), 'Toggle typewriter scrolling'],
       [K('⌘⇧O', 'Ctrl+Shift+O'), 'Cycle focus mode', 'Off → paragraph → sentence → off.'],
       [K('⌘M', 'Ctrl+M'), 'Minimize window'],
@@ -5089,45 +5093,11 @@ function showHelp() {
 /* ================================================================== */
 
 function safeName(s) {
-  return (s || t('Untitled')).replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-');
+  return (s || t('Untitled')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().replace(/[. ]+$/, '').replace(/\s+/g, '-') || 'Untitled';
 }
 
-// Every paragraph is rebuilt from its text runs, so exports carry only
-// author-meaningful markup: text, bold, italic, alignment, scene breaks.
-// Stray spans, inline styles, trailing <br>s, and no-break spaces all
-// stop at this door.
-function parasFromHtml(html) {
-  const holder = document.createElement('div');
-  holder.innerHTML = html || '';
-  // an unwritten outline section is a ghost paragraph plus the scene break
-  // NEO planted for it; neither belongs in a book
-  holder.querySelectorAll('p.ghost[data-sec-id]').forEach((g) => {
-    const brk = holder.querySelector(`p.scene-break[data-sec-brk="${g.dataset.secId}"]`);
-    if (brk) brk.remove();
-  });
-  holder.querySelectorAll('.darling-anchor, .ph-mark, .ghost').forEach((n) => n.remove());
-  DocumentRichText.prepareExport(holder);
-  return [...holder.querySelectorAll('p')].map((p) => {
-    const sceneBreak = p.classList.contains('scene-break');
-    const poetry = p.classList.contains('poetry');
-    const align = (p.style && p.style.textAlign) || '';
-    const runs = paraRuns(p.innerHTML).filter((r) => r.text);
-    const inner = runs.map((r) => {
-      let t = escHtml(r.text);
-      if (r.i) t = '<i>' + t + '</i>';
-      if (r.b) t = '<b>' + t + '</b>';
-      return t;
-    }).join('');
-    return {
-      sceneBreak,
-      poetry,
-      text: p.innerText.replace(/\u00a0/g, ' ').trim(),
-      runs,
-      align,
-      html: `<p${poetry ? ' class="poetry"' : ''}${align ? ` style="text-align:${align}"` : ''}>${inner}</p>`
-    };
-  }).filter((p) => p.sceneBreak || p.text);
-}
+// All formats use the same semantic text records.
+function parasFromHtml(html) { return ExportText.paragraphs(html); }
 
 function exportChapters() {
   // [{num, heading, paras: [{text, sceneBreak, html}]}]
@@ -5174,7 +5144,7 @@ function buildTxt(data) {
   out += t('by {author}', { author: d.author }) + '\n\n\n';
   for (const ch of d.sections) {
     if (ch.heading) out += `${ch.heading.toUpperCase()}\n\n`;
-    for (const p of ch.paras) out += p.sceneBreak ? '\n***\n\n' : (p.poetry ? '    ' : '') + p.text + '\n\n';
+    for (const p of ch.paras) out += p.sceneBreak ? '\n***\n\n' : ExportText.marker(p) + (p.poetry ? p.text.split('\n').map(line => '    ' + line).join('\n') : p.text) + '\n\n';
     out += '\n';
   }
   return out;
@@ -5186,7 +5156,9 @@ function buildMd(data) {
   const mdMeta = (s) => String(s || '').replace(/([\\`*_\[\]#<>])/g, '\\$1');
   // wrap a run in emphasis markers, keeping boundary spaces outside them
   const mdRun = (r) => {
-    let t = r.text.replace(/([\\*_`])/g, '\\$1');
+    let t = r.text.replace(/([\\*_`<>~])/g, '\\$1').replace(/\n/g, '  \n');
+    if (r.u) t = '<u>' + t + '</u>';
+    if (r.s) t = '~~' + t + '~~';
     const mark = r.b && r.i ? '***' : r.b ? '**' : r.i ? '*' : '';
     if (!mark) return t;
     const lead = t.match(/^\s*/)[0];
@@ -5200,7 +5172,7 @@ function buildMd(data) {
   for (const ch of d.sections) {
     if (ch.heading) out += `\n## ${mdMeta(ch.heading)}\n\n`;
     for (const p of ch.paras) {
-      out += p.sceneBreak ? '\n***\n\n' : (p.poetry ? '> ' : '') + p.runs.map(mdRun).join('') + '\n\n';
+      out += p.sceneBreak ? '\n***\n\n' : (p.heading ? '#'.repeat(Math.min(6, p.heading + 2)) + ' ' : p.list ? '  '.repeat(p.list.depth) + (p.list.ordered ? p.list.number + '. ' : '- ') : p.poetry ? '> ' : '') + p.runs.map(mdRun).join('') + '\n\n';
     }
   }
   return out;
@@ -5216,7 +5188,7 @@ function buildHtml(data, opts = {}) {
     let first = true;
     const paras = ch.paras.map((p) => {
       if (p.sceneBreak) return '<p class="brk">***</p>';
-      if (p.poetry) return p.html;
+      if (p.poetry || p.heading || p.list) return p.html;
       let html = p.html;
       if (first) {
         const h = document.createElement('div');
@@ -5231,13 +5203,16 @@ function buildHtml(data, opts = {}) {
     }).join('\n');
     return `
     <section class="chapter">
-      ${ch.heading ? `<h2>${escHtml(ch.heading)}</h2>` : ''}
+      ${ch.heading ? `<h2 class="chapter-heading">${escHtml(ch.heading)}</h2>` : ''}
       ${paras}
     </section>`;
   }).join('\n');
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${escHtml(d.title)}</title>
 <style>
+  ${opts.pageNumbers ? `@page { @bottom-center { content: counter(page); font-family: Georgia, serif; font-size: 10pt; color: #555; } }
+  @page frontmatter { counter-increment: page 0; @bottom-center { content: none; } }
+  .coverpage, .titlepage { page: frontmatter; }` : ''}
   body { font-family: Georgia, serif; color: #1c1c1c; max-width: 620px; margin: 40px auto; line-height: 1.7; font-size: 13pt; }
   .coverpage { text-align: center; margin: 0 0 40px; page-break-after: always; }
   .coverpage img { display: block; margin: 0 auto; width: 100%; max-width: 620px; max-height: 95vh; object-fit: contain; }
@@ -5246,14 +5221,16 @@ function buildHtml(data, opts = {}) {
   .titlepage .sub { font-style: italic; color: #555; }
   .titlepage .auth { margin-top: 40px; letter-spacing: 3px; text-transform: uppercase; font-size: 11pt; }
   .chapter { page-break-before: always; }
-  .chapter h2 { text-align: center; letter-spacing: 4px; text-transform: uppercase; font-size: 12pt; font-weight: normal; color: #555; margin: 60px 0 40px; }
-  .chapter p { text-indent: 2em; margin: 0; }
+  .chapter .chapter-heading { text-align: center; letter-spacing: 4px; text-transform: uppercase; font-size: 12pt; font-weight: normal; color: #555; margin: 60px 0 40px; }
+  .text-heading { break-after: avoid; }
+  .chapter ul, .chapter ol { margin-block: 0; }
+  .chapter p { text-indent: ${opts.paragraphSpacing ? '0' : '2em'}; margin: ${opts.paragraphSpacing ? '0 0 1em' : '0'}; }
   .chapter h2 + p, .brk + p, .chapter p.first { text-indent: 0; }
   /* an in-flow raised initial: stays inside its word for copy, search,
      and screen readers, unlike a floated drop cap */
   ${(library.fonts || {}).dropcap === 'none' ? '' : '.chapter h2 + p:not(.poetry)::first-letter, .chapter p.first::first-letter { font-size: 1.8em; line-height: 1; }'}
   .brk { text-align: center; text-indent: 0 !important; letter-spacing: 8px; color: #888; margin: 2.5em 0; }
-  .chapter p.poetry { text-indent: 0; margin: 0 2.5em; }
+  .chapter p.poetry { text-indent: 0; margin: 0 2.5em; white-space: pre-wrap; tab-size: 4; }
   .chapter p:not(.poetry) + p.poetry, .chapter h2 + p.poetry { margin-top: 0.9em; }
   .chapter p.poetry + p:not(.poetry) { margin-top: 0.9em; }
   .prov { margin-top: 80px; text-align: center; color: #999; font-size: 9pt; }
@@ -5300,47 +5277,60 @@ function paraRuns(pHtml) {
 
 function docxP(runs, opts = {}) {
   const pPr = [];
+  if (opts.heading) pPr.push(`<w:pStyle w:val="Heading${opts.heading}"/><w:keepNext/>`);
   if (opts.pageBreak) pPr.push('<w:pageBreakBefore/>');
-  if (opts.align) pPr.push(`<w:jc w:val="${opts.align}"/>`);
+  if (opts.list) pPr.push(`<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${opts.list}"/></w:numPr>`);
+  if (opts.spaceBefore) pPr.push(`<w:spacing w:before="${opts.spaceBefore}" w:line="360" w:lineRule="auto"/>`);
   if (opts.indent) pPr.push('<w:ind w:firstLine="480"/>');
   if (opts.poetry) pPr.push('<w:ind w:left="720" w:right="720"/>');
-  if (opts.spaceBefore) pPr.push(`<w:spacing w:before="${opts.spaceBefore}" w:line="360" w:lineRule="auto"/>`);
+  if (opts.align) pPr.push(`<w:jc w:val="${opts.align}"/>`);
   const rXml = runs.map((r) => {
-    const rPr = (r.b ? '<w:b/>' : '') + (r.i ? '<w:i/>' : '') + (opts.size ? `<w:sz w:val="${opts.size}"/>` : '');
-    return `<w:r>${rPr ? '<w:rPr>' + rPr + '</w:rPr>' : ''}<w:t xml:space="preserve">${escXml(r.text)}</w:t></w:r>`;
+    const rPr = (r.b ? '<w:b/>' : '') + (r.i ? '<w:i/>' : '') + (r.s ? '<w:strike/>' : '') + (opts.size ? `<w:sz w:val="${opts.size}"/>` : '') + (r.u ? '<w:u w:val="single"/>' : '');
+    return `<w:r>${rPr ? '<w:rPr>' + rPr + '</w:rPr>' : ''}<w:t xml:space="preserve">${escXml(r.text).replace(/\n/g, '</w:t><w:br/><w:t xml:space="preserve">')}</w:t></w:r>`;
   }).join('');
   return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${rXml}</w:p>`;
 }
 
 function buildDocxEntries(data) {
   const d = data || bookExportData();
-  const body = [];
+  const body = [], numbering = [];
   // title page
   body.push(docxP([{ text: d.title, b: true }], { align: 'center', spaceBefore: 3000, size: 56 }));
   if (d.subtitle) body.push(docxP([{ text: d.subtitle, i: true }], { align: 'center', size: 32 }));
   body.push(docxP([{ text: d.author }], { align: 'center', spaceBefore: 800 }));
-  d.sections.forEach((ch) => {
+  const pageLayout = '<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720"/>';
+  // Separate front matter allows real Word page fields to restart at chapter 1.
+  if (d.pageNumbers) body.push(`<w:p><w:pPr><w:sectPr>${pageLayout}</w:sectPr></w:pPr></w:p>`);
+  d.sections.forEach((ch, index) => {
+    const pageBreak = !(d.pageNumbers && index === 0);
     if (ch.heading) {
-      body.push(docxP([{ text: ch.heading.toUpperCase(), b: false }], { align: 'center', pageBreak: true, spaceBefore: 1200, size: 28 }));
+      body.push(docxP([{ text: ch.heading.toUpperCase(), b: false }], { heading: 1, align: 'center', pageBreak, spaceBefore: 1200, size: 28 }));
       body.push(docxP([], {}));
     } else {
-      body.push(docxP([], { pageBreak: true })); // headingless story still starts fresh
+      if (pageBreak) body.push(docxP([], { pageBreak: true })); // headingless story still starts fresh
     }
     for (const p of ch.paras) {
       if (p.sceneBreak) body.push(docxP([{ text: '***' }], { align: 'center', spaceBefore: 240 }));
-      else if (p.poetry) body.push(docxP(paraRuns(p.html), { align: p.align === 'center' || p.align === 'right' ? p.align : '', poetry: true }));
-      else if (p.align === 'center' || p.align === 'right') body.push(docxP(paraRuns(p.html), { align: p.align }));
-      else body.push(docxP(paraRuns(p.html), { indent: true }));
+      else {
+        let list;
+        if (p.list) {
+          list = numbering.length + 1;
+          numbering.push(`<w:abstractNum w:abstractNumId="${list}"><w:multiLevelType w:val="singleLevel"/><w:lvl w:ilvl="0"><w:start w:val="${p.list.number}"/><w:numFmt w:val="${p.list.ordered ? 'decimal' : 'bullet'}"/><w:lvlText w:val="${p.list.ordered ? '%1.' : '•'}"/><w:pPr><w:ind w:left="${720 + p.list.depth * 360}" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum>`);
+        }
+        body.push(docxP(p.runs || ExportText.runs(p.html), { heading: p.heading ? Math.min(6, p.heading + 1) : null, list,
+          align: p.align === 'justify' ? 'both' : p.align, poetry: p.poetry, indent: !p.heading && !p.list && !p.poetry && !['center', 'right'].includes(p.align) }));
+      }
     }
   });
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body.join('')}
-<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body.join('')}
+<w:sectPr>${d.pageNumbers ? '<w:footerReference w:type="default" r:id="pageFooter"/><w:type w:val="nextPage"/>' : ''}${pageLayout}${d.pageNumbers ? '<w:pgNumType w:fmt="decimal" w:start="1"/>' : ''}</w:sectPr>
 </w:body></w:document>`;
   const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr></w:rPrDefault>
 <w:pPrDefault><w:pPr><w:spacing w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+${Array.from({length:6}, (_, i) => `<w:style w:type="paragraph" w:styleId="Heading${i+1}"><w:name w:val="heading ${i+1}"/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="${i}"/></w:pPr><w:rPr><w:b/><w:sz w:val="${36-i*2}"/></w:rPr></w:style>`).join('')}
 </w:styles>`;
   return [
     { path: '[Content_Types].xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -5348,7 +5338,9 @@ function buildDocxEntries(data) {
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+${d.pageNumbers ? '<Override PartName="/word/footer.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>' : ''}
 </Types>` },
     { path: '_rels/.rels', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -5357,9 +5349,14 @@ function buildDocxEntries(data) {
     { path: 'word/_rels/document.xml.rels', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+${d.pageNumbers ? '<Relationship Id="pageFooter" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer.xml"/>' : ''}
 </Relationships>` },
     { path: 'word/document.xml', content: documentXml },
-    { path: 'word/styles.xml', content: stylesXml }
+    { path: 'word/styles.xml', content: stylesXml },
+    ...(d.pageNumbers ? [{ path: 'word/footer.xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr><w:fldSimple w:instr=" PAGE "><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>` }] : []),
+    { path: 'word/numbering.xml', content: `<?xml version="1.0" encoding="UTF-8"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${numbering.join('')}${numbering.map((_, i) => `<w:num w:numId="${i+1}"><w:abstractNumId w:val="${i+1}"/></w:num>`).join('')}</w:numbering>` }
   ];
 }
 
@@ -5380,21 +5377,11 @@ async function exportCover(d) {
 
 function chapterXhtml(ch, d) {
   let first = true;
-  const paras = ch.paras.map((p) => {
+  const paras = ch.paras.map(p => {
     if (p.sceneBreak) { first = true; return '<p class="brk">* * *</p>'; }
-    const classes = [];
-    if (p.poetry) classes.push('poetry');
-    else if (first) classes.push('first');
-    if (p.align === 'center' || p.align === 'right') classes.push(p.align);
-    const cls = classes.length ? ` class="${classes.join(' ')}"` : '';
-    if (!p.poetry) first = false;
-    const inner = paraRuns(p.html).map((r) => {
-      let t = escXml(r.text);
-      if (r.i) t = '<em>' + t + '</em>';
-      if (r.b) t = '<strong>' + t + '</strong>';
-      return t;
-    }).join('');
-    return `<p${cls}>${inner}</p>`;
+    let html = ExportText.html(p);
+    if (!p.poetry && !p.heading && !p.list && first) { html = html.replace('<p', '<p class="first"'); first = false; }
+    return html;
   }).join('\n');
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
@@ -5485,11 +5472,13 @@ ${navPoints}
     { path: 'OEBPS/style.css', content: `body { font-family: serif; line-height: 1.5; margin: 1em; }
 h1 { text-align: center; font-weight: normal; letter-spacing: 0.2em; text-transform: uppercase; font-size: 1.2em; margin: 3em 0 2em; }
 p { text-indent: 1.2em; margin: 0; }
+ul, ol { margin-block: 0; }
+h1.text-heading { text-align: inherit; text-transform: none; letter-spacing: normal; font-weight: bold; font-size: 1.6em; margin: 1em 0; }
 p.first, p.brk + p { text-indent: 0; }
 p.center { text-align: center; text-indent: 0; }
 p.right { text-align: right; text-indent: 0; }
 p.brk { text-align: center; text-indent: 0; margin: 2.5em 0; letter-spacing: 0.5em; }
-p.poetry { text-indent: 0; margin: 0 2em; }
+p.poetry { text-indent: 0; margin: 0 2em; white-space: pre-wrap; tab-size: 4; }
 p:not(.poetry) + p.poetry, h1 + p.poetry { margin-top: 0.9em; }
 p.poetry + p:not(.poetry) { margin-top: 0.9em; }
 .titlepage { text-align: center; margin-top: 30%; }
@@ -5574,18 +5563,38 @@ async function exportShelfAnthology(shelf) {
   if (saved) toast(t('Anthology of {n} works exported: {file}', { n: shelf.bookIds.length, file: saved.split('/').pop() }), 6000);
 }
 
+let exportBusy = false;
 async function doExport(format) {
   if (!book) { toast(t('Open a book first')); return; }
-  flushAllSaves();
-  const defaultName = safeName(book.title);
-  let payload;
-  if (format === 'docx') payload = { format, defaultName, zipEntries: buildDocxEntries() };
-  else if (format === 'epub') payload = { format, defaultName, zipEntries: await buildEpubEntries() };
-  else if (format === 'txt') payload = { format, defaultName, content: buildTxt() };
-  else if (format === 'md') payload = { format, defaultName, content: buildMd() };
-  else payload = { format, defaultName, content: buildHtml(null, { cover: await exportCover(bookExportData()) }) };
-  const saved = await window.neo.exportSave(payload);
-  if (saved) toast(t('Exported: {file}', { file: saved.split('/').pop() }));
+  if (exportBusy) return;
+  exportBusy = true;
+  const bookId = book.id;
+  try {
+    const choices = await window.chooseBookExport(format);
+    if (!choices || book?.id !== bookId) return;
+    await flushAllSaves();
+    if (book?.id !== bookId) return;
+    const data = bookExportData();
+    data.pageNumbers = choices.pageNumbers;
+    data.sections = ManuscriptExport.sections(choices.rows, choices.selected, choices.mode, choices.breaks, row => {
+      if (row.section === 'manuscript') {
+        const el = [...document.querySelectorAll('.chapter')].find(n => n.dataset.id === row.id)?.querySelector('.chapter-body');
+        return parasFromHtml(el?.innerHTML ?? chapterHTML[row.id] ?? '');
+      }
+      const node = WorkspaceTree.find(book.workspaceTree[row.section], row.id)?.node;
+      return parasFromHtml(node?.html ?? DocumentRichText.fromText(node?.text || ''));
+    }, choices.numbering);
+    const defaultName = safeName(data.title) || 'Untitled';
+    let payload;
+    if (format === 'docx') payload = { format, defaultName, zipEntries: buildDocxEntries(data) };
+    else if (format === 'epub') payload = { format, defaultName, zipEntries: await buildEpubEntries(data) };
+    else if (format === 'txt') payload = { format, defaultName, content: buildTxt(data) };
+    else if (format === 'md') payload = { format, defaultName, content: buildMd(data) };
+    else payload = { format, defaultName, content: buildHtml(data, { cover: await exportCover(data), paragraphSpacing: format === 'html', pageNumbers: format === 'pdf' && choices.pageNumbers }) };
+    const saved = await window.neo.exportSave(payload);
+    if (saved) toast(t('Exported: {file}', { file: saved.split(/[\\/]/).pop() }));
+  } catch (error) { toast('Export failed: ' + error.message, 7000); }
+  finally { exportBusy = false; }
 }
 
 function chooseEmailMethod() {
@@ -5720,6 +5729,7 @@ window.neo.onMenu(async (msg) => {
   if (msg.type === 'emailDraft') doEmailDraft();
   if (msg.type === 'emailSettings') emailSettings();
   if (msg.type === 'find') openSearch();
+  if (msg.type === 'searchBook') window.openBookSearch?.();
   if (msg.type === 'spellcheck') toggleSpellcheck();
   if (msg.type === 'spellLanguage') changeSpellLanguage(msg.value);
   if (msg.type === 'reshelve') reshelveBook();

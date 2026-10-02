@@ -1,7 +1,7 @@
 {
   "name": "neo-ai",
   "productName": "Neo-AI",
-  "version": "0.9.32",
+  "version": "0.9.44",
   "description": "A word processor for authors. Distraction-free by default.",
   "homepage": "https://github.com/raycrews/neo-ai",
   "main": "main.js",
@@ -13,12 +13,16 @@
     "test:chat": "electron scripts/test-chat.cjs",
     "test:formatting": "electron scripts/test-formatting.cjs",
     "test:context-menu": "electron scripts/test-context-menu.cjs",
+    "test:search": "electron scripts/test-search.cjs",
+    "test:export": "electron scripts/test-export.cjs",
+    "test:revision": "electron scripts/test-revision.cjs",
     "test:general": "electron scripts/test-general.cjs",
     "package:mac": "electron-builder --mac",
     "package": "electron-builder --mac",
     "package:win": "electron-builder --win",
     "package:linux": "electron-builder --linux",
-    "package:all": "electron-builder --mac --win --linux"
+    "package:all": "electron-builder --mac --win --linux",
+    "test:instruction-library": "electron scripts/test-instruction-library.cjs"
   },
   "build": {
     "appId": "io.github.raycrews.neoai",

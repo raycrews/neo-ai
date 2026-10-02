@@ -1,10 +1,19 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+contextBridge.exposeInMainWorld('neoRevisionAPI', {
+  connections: () => ipcRenderer.invoke('revision:connections'),
+  generate: input => ipcRenderer.invoke('revision:generate', input),
+  cancel: requestId => ipcRenderer.invoke('revision:cancel', requestId),
+  onOpen: callback => ipcRenderer.on('revision:open', (_event, action) => callback(action))
+});
 contextBridge.exposeInMainWorld('neoAppearance', {
   read: () => ipcRenderer.invoke('appearance:read'),
   onChange: callback => ipcRenderer.on('appearance:changed', (_event, value) => callback(value))
 });
 contextBridge.exposeInMainWorld('neoChat', {
   read: id => ipcRenderer.invoke('chat:read', id),
+  searchSnapshot: id => ipcRenderer.invoke('chat:searchSnapshot', id),
+  reveal: (bookId, id, messageId) => ipcRenderer.invoke('chat:reveal', bookId, id, messageId),
+  onReveal: callback => ipcRenderer.on('chat:reveal', (_event, value) => callback(value)),
   context: id => ipcRenderer.invoke('chat:context', id),
   budget: (bookId, id, draft, preview) => ipcRenderer.invoke('chat:budget', bookId, id, draft, preview),
   setContextLimit: (bookId, profileId, model, limit) => ipcRenderer.invoke('chat:limit', bookId, profileId, model, limit),
