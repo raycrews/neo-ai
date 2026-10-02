@@ -1,0 +1,44 @@
+/* Shared interface palette. The manuscript's --paper and --ink are independent. */
+:root {
+  --accent: #c9a86a;
+  --ui-scheme: dark; --ui-bg: #191919; --ui-panel: #232321; --ui-hover: #31312d;
+  --ui-text: #e2ddd3; --ui-muted: #aaa69e; --ui-border: #49473f; --ui-danger: #edb2a7;
+  --ui-accent-fill: #c9a86a; --ui-accent-ink: #171717; --ui-accent-soft: #c9a86a29;
+}
+:root[data-app-theme="light"] {
+  --ui-scheme: light; --ui-bg: #f4f3ef; --ui-panel: #ffffff; --ui-hover: #e9e7e1;
+  --ui-text: #282722; --ui-muted: #66635b; --ui-border: #c6c1b6; --ui-danger: #a52b23;
+}
+:root[data-app-theme] { color-scheme: var(--ui-scheme); --bg: var(--ui-bg); --bg-soft: var(--ui-panel); --pane: var(--ui-panel); --muted: var(--ui-muted); }
+html[data-app-theme] body { background: var(--ui-bg); color: var(--ui-text); --muted: var(--ui-muted); }
+html[data-app-theme] .ai-chat { --ai-gold: var(--accent); }
+html[data-app-theme] :is(.primary, .ai-chat .ai-primary, .btn-gold, .stats-row button) { background: var(--ui-accent-fill); border-color: var(--ui-accent-fill); color: var(--ui-accent-ink); }
+html[data-app-theme] :is(.primary, .ai-chat .ai-primary):hover:not(:disabled) { background: var(--ui-accent-fill); color: var(--ui-accent-ink); filter: brightness(1.08); }
+html[data-app-theme] .tree-context-toggle[aria-checked="true"]::before,
+html[data-app-theme] .workspace-navigation .tab.drag-over { color: var(--ui-accent-ink); }
+html[data-app-theme] .workspace-root .tab.active { background: transparent; }
+html[data-app-theme] :is(#nav-pane, #side-pane, #bottombar, #pen-rack, #searchbar, .modal, .shortcuts-header, .shortcuts-footer, .shortcut-row) { border-color: var(--ui-border); }
+html[data-app-theme] :is(.modal, #hint, .spell-menu, .sticky, #searchbar, #stats-chart) { background: var(--ui-panel); color: var(--ui-text); }
+html[data-app-theme] :is(.modal input, .modal select, .fr-choice, .fr-font, .shortcut-row kbd, #searchbar input) { background: var(--ui-bg); color: var(--ui-text); border-color: var(--ui-border); }
+html[data-app-theme] :is(.btn-quiet, #author-chip, .shelf-header-button, .shelf-name, .shelf-grip, .sticky .s-ch, .sticky .s-actions button, .stickies-empty, .shortcuts-footer span, .shortcut-row small, #side-pin) { color: var(--ui-muted); }
+html[data-app-theme] :is(.shelf-header-button, .new-book, .shelf-books, .pen-slot) { border-color: var(--ui-border); }
+html[data-app-theme] :is(.new-book, .sticky textarea, .nav-item .n-row, .spell-menu button) { color: var(--ui-text); }
+html[data-app-theme] :is(.shelf-header-button:hover, .shelf-label:focus, #side-pin.pinned) { color: var(--accent); }
+html[data-app-theme] :is(.nav-item:hover, .spell-menu button:hover, .fr-choice:hover) { background: var(--ui-hover); }
+html[data-app-theme] :is(.spell-menu button, #searchbar button) { background: transparent; color: var(--ui-text); }
+html[data-app-theme] .shortcut-row kbd { color: var(--ui-text); }
+html[data-app-theme] ::-webkit-scrollbar-thumb { background: var(--ui-border); }
+html[data-app-theme] ::-webkit-scrollbar-track { background: transparent; }
+/* Detached outline uses interface colors, rather than borrowing paper theme. */
+html[data-app-theme] body.outline-pane { --ink: var(--ui-text); --panel: var(--ui-panel); --border: var(--ui-border); }
+.general-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+#general .info-card > label { margin: 22px 0 8px; }
+#appearance-theme { max-width: 320px; }
+#accent-swatches { display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0; }
+#accent-swatches button { width: 32px; height: 32px; border-radius: 50%; padding: 0; background: var(--swatch); border: 2px solid var(--ui-border); }
+#accent-swatches button:hover { background: var(--swatch); transform: scale(1.08); }
+#accent-swatches button[aria-pressed="true"] { outline: 2px solid var(--ui-text); outline-offset: 3px; }
+.custom-accent { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+#accent-color { width: 48px; height: 34px; padding: 3px; cursor: pointer; }
+#accent-value { font-size: 12px; color: var(--ui-muted); }
+#appearance-status, #library-status { color: var(--ui-muted); margin-bottom: 0; }

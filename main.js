@@ -2,10 +2,22 @@
 // Owns the window and all file-system access. The renderer talks to this
 // through the IPC handlers below (see preload.js for the exposed API).
 
-const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, utilityProcess, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, utilityProcess, screen, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { relaunchOptions } = require('./relaunch');
+const { prepareLibrary, validateLibraryTarget } = require('./library-location');
+const { installPaneWindows } = require('./pane-windows');
+const paneWindows = installPaneWindows({ BrowserWindow, ipcMain, screen, readSettings, writeSettings, dialog });
+const { protectedStorage, legacySecretStore } = require('./protected-storage');
+const protector = protectedStorage(require('electron').safeStorage);
+const appearance = require('./appearance-main').installAppearance({ app, BrowserWindow, ipcMain, nativeTheme, readSettings, writeSettings });
+const appSettings = require('./settings-window').installSettingsWindow({
+  app, BrowserWindow, ipcMain, dialog, protector, getLibraryPath: () => LIBRARY_DIR,
+  browseLibrary: win => chooseLibraryFolder({ window: win, browse: true }), appearance
+});
+require('./ai-chat-main').installChat({ ipcMain, paneWindows, connections: appSettings.connections, assistants: appSettings.assistants, bookDir });
 
 // macOS Chromium's "smart delete" also removes whitespace around a deleted
 // selection, and that pass can duplicate characters. Deletes stay literal.
@@ -16,19 +28,24 @@ app.commandLine.appendSwitch('blink-settings', 'smartInsertDeleteEnabled=false')
 // ---------------------------------------------------------------------------
 // Resolved properly at startup via app.getPath('documents') — this default
 // covers any early access and non-redirected setups.
-let LIBRARY_DIR = path.join(os.homedir(), 'Documents', 'NEO Library');
+let LIBRARY_DIR = path.join(os.homedir(), 'Documents', 'Neo-AI Library');
 let LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
 
 // NEO's few app-level settings (today: a custom library folder) live in the
 // system's per-app data folder, since they must exist before the library
 // is found. Everything about the writing stays in the library itself.
 function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }
-function readSettings() {
-  try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')); } catch { return {}; }
+function readSettings(strict = false) {
+  try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')); } catch (error) {
+    if (strict && error.code !== 'ENOENT') throw error;
+    return {};
+  }
 }
 function writeSettings(obj) {
   fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
-  fs.writeFileSync(settingsPath(), JSON.stringify(obj, null, 2));
+  const temporary = settingsPath() + '.tmp';
+  fs.writeFileSync(temporary, JSON.stringify(obj, null, 2));
+  fs.renameSync(temporary, settingsPath());
 }
 
 // ---------------------------------------------------------------------------
@@ -38,6 +55,7 @@ function writeSettings(obj) {
 // ---------------------------------------------------------------------------
 const NeoI18n = require('./i18n.js');
 const { t } = NeoI18n;
+require('./text-context-menu').installTextContextMenus({ app, BrowserWindow, Menu, t });
 const LOCALES_DIR = path.join(__dirname, 'locales');
 let uiLanguage = 'en';
 
@@ -129,11 +147,18 @@ ipcMain.handle('i18n:reload', (e) => {
 
 // File → Library Folder…: point NEO at any folder, or back at the default.
 // The library is plain files, so the writer moves them; NEO only follows.
-async function chooseLibraryFolder() {
-  const win = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
-  const defaultDir = path.join(app.getPath('documents'), 'NEO Library');
+let choosingLibrary = false;
+async function chooseLibraryFolder(options = {}) {
+  if (choosingLibrary) return { canceled: true };
+  choosingLibrary = true;
+  try { return await selectLibraryFolder(options); }
+  finally { choosingLibrary = false; }
+}
+async function selectLibraryFolder(options) {
+  const win = options.window || BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  const defaultDir = path.join(app.getPath('documents'), 'Neo-AI Library');
   const custom = LIBRARY_DIR !== defaultDir;
-  const ask = await dialog.showMessageBox(win, {
+  const ask = options.browse ? { response: 0 } : await dialog.showMessageBox(win, {
     type: 'question',
     message: t('Library folder'),
     detail: t('Your books live in:\n{dir}\n\nChoose another folder and NEO restarts there. Existing books stay where they are — move the files yourself if you want them along.', { dir: LIBRARY_DIR }),
@@ -155,25 +180,74 @@ async function chooseLibraryFolder() {
   } else {
     return;
   }
-  if (next === LIBRARY_DIR) return;
+  if (path.resolve(next || defaultDir) === path.resolve(LIBRARY_DIR)) return { unchanged: true };
+  try {
+    if (!next) fs.mkdirSync(defaultDir, { recursive: true });
+    validateLibraryTarget(next || defaultDir);
+  } catch (error) {
+    const message = 'Could not open that library folder. ' + error.message;
+    if (options.browse) throw new Error(message);
+    await dialog.showMessageBox(win, { type: 'warning', message: 'Library folder unavailable', detail: message });
+    return;
+  }
+  try { await paneWindows.flush(); } catch (error) {
+    await dialog.showMessageBox(win, { type: 'warning', message: 'Finish saving before changing library folders', detail: error.message });
+    return;
+  }
   const settings = readSettings();
   if (next) settings.libraryDir = next; else delete settings.libraryDir;
+  settings.initializeLibrary = true;
   writeSettings(settings);
-  app.relaunch();
+  app.relaunch(relaunchOptions());
   app.exit(0);
 }
 
 function ensureLibrary() {
-  if (!fs.existsSync(LIBRARY_DIR)) fs.mkdirSync(LIBRARY_DIR, { recursive: true });
-  if (!fs.existsSync(LIBRARY_FILE)) {
-    const seed = {
-      authorName: '',
-      penNames: [],
-      firstRunDone: false,
-      pageTheme: 'night',
-      shelves: [{ id: 'shelf-1', name: t('Works in Progress'), bookIds: [] }]
-    };
-    fs.writeFileSync(LIBRARY_FILE, JSON.stringify(seed, null, 2));
+  prepareLibrary(LIBRARY_DIR);
+}
+
+async function initializeLibraryLocation() {
+  for (;;) {
+    try {
+      const settings = readSettings(true);
+      LIBRARY_DIR = settings.libraryDir || path.join(app.getPath('documents'), 'Neo-AI Library');
+      LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
+      prepareLibrary(LIBRARY_DIR, {
+        initialize: !settings.libraryDir || settings.initializeLibrary === true,
+        seed: {
+          authorName: '',
+          penNames: [],
+          firstRunDone: false,
+          pageTheme: 'night',
+          shelves: [{ id: 'shelf-1', name: t('Works in Progress'), bookIds: [] }]
+        }
+      });
+      if (settings.initializeLibrary) {
+        delete settings.initializeLibrary;
+        writeSettings(settings);
+      }
+      return true;
+    } catch (error) {
+      logError('library startup', error);
+      const { response } = await dialog.showMessageBox({
+        type: 'warning', title: 'Neo-AI — Library unavailable',
+        message: 'Neo-AI could not open your library',
+        detail: `${LIBRARY_DIR}\n\nCheck that the drive or NAS is connected, then retry. You can also choose the library using its network path.\n\n${error.message}`,
+        buttons: ['Retry', 'Choose Library Folder…', 'Quit'], defaultId: 0, cancelId: 2
+      });
+      if (response === 2) return false;
+      if (response === 1) {
+        const selected = await dialog.showOpenDialog({
+          title: 'Choose your library folder', properties: ['openDirectory'], defaultPath: LIBRARY_DIR
+        });
+        if (!selected.canceled && selected.filePaths[0]) {
+          const settings = readSettings(true);
+          settings.libraryDir = selected.filePaths[0];
+          settings.initializeLibrary = true;
+          writeSettings(settings);
+        }
+      }
+    }
   }
 }
 
@@ -434,16 +508,11 @@ ipcMain.handle('cover:read', (_e, bookId, fname) => {
 // ---------------------------------------------------------------------------
 
 const SECRETS_FILE = () => path.join(app.getPath('userData'), 'secrets.json');
+const coverSecrets = legacySecretStore(SECRETS_FILE, protector);
 
 function readSecret(name) {
   try {
-    const { safeStorage } = require('electron');
-    const all = readJSON(SECRETS_FILE(), {});
-    if (!all[name]) return null;
-    if (all[name].enc && safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(all[name].value, 'base64'));
-    }
-    return all[name].value;
+    return coverSecrets.get(name);
   } catch (err) {
     logError('secret', err);
     return null;
@@ -451,17 +520,7 @@ function readSecret(name) {
 }
 
 ipcMain.handle('secret:set', (_e, name, value) => {
-  const { safeStorage } = require('electron');
-  const all = readJSON(SECRETS_FILE(), {});
-  if (!value) {
-    delete all[name];
-  } else if (safeStorage.isEncryptionAvailable()) {
-    all[name] = { enc: true, value: safeStorage.encryptString(String(value)).toString('base64') };
-  } else {
-    all[name] = { enc: false, value: String(value) };
-  }
-  writeJSON(SECRETS_FILE(), all);
-  return true;
+  return coverSecrets.set(name, value);
 });
 
 ipcMain.handle('secret:has', (_e, name) => !!readSecret(name));
@@ -913,13 +972,12 @@ ipcMain.handle('import:pick', async () => {
 // ---------------------------------------------------------------------------
 // Robustness: error log, daily backups, single instance
 // ---------------------------------------------------------------------------
-const ERROR_LOG = () => path.join(LIBRARY_DIR, 'neo-errors.log');
-
 function logError(source, err) {
   try {
-    ensureLibrary();
     const line = `[${new Date().toISOString()}] [${source}] ${err && err.stack ? err.stack : String(err)}\n`;
-    fs.appendFileSync(ERROR_LOG(), line);
+    const directory = app.getPath('userData');
+    fs.mkdirSync(directory, { recursive: true });
+    fs.appendFileSync(path.join(directory, 'neo-errors.log'), line);
   } catch { /* never let logging crash the app */ }
 }
 
@@ -982,6 +1040,7 @@ function createWindow() {
   }
   const win = new BrowserWindow({
     ...bounds,
+    show: !process.env.NEO_TEST_HEADLESS,
     minWidth: 800,
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
@@ -996,7 +1055,8 @@ function createWindow() {
       spellcheck: true
     }
   });
-  win.loadFile('index.html');
+  paneWindows.attach(win);
+  win.loadFile(path.join(__dirname, 'index.html'));
   const remember = () => {
     if (win.isDestroyed() || win.isFullScreen() || win.isMinimized()) return;
     writeSettings({ ...readSettings(), window: win.getNormalBounds() });
@@ -1114,7 +1174,7 @@ ipcMain.handle('spell:learn', async (_e, word) => {
 // Application menu — Help and Format live here, out of the writing room
 // ---------------------------------------------------------------------------
 function sendToWindow(msg) {
-  const w = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0];
+  const w = paneWindows.getOwner();
   if (w) w.webContents.send('menu', msg);
 }
 
@@ -1161,6 +1221,7 @@ function buildMenu() {
       role: 'appMenu',
       submenu: [
         { role: 'about', label: t('About NEO') },
+        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => appSettings.open() },
         { type: 'separator' },
         { role: 'services', label: t('Services') },
         { type: 'separator' },
@@ -1174,6 +1235,7 @@ function buildMenu() {
     {
       label: t('File'),
       submenu: [
+        ...(!isMac ? [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => appSettings.open() }, { type: 'separator' }] : []),
         {
           label: t('Export'),
           submenu: [
@@ -1203,7 +1265,6 @@ function buildMenu() {
         { label: t('Cover Art…'), click: () => sendToWindow({ type: 'coverArt' }) },
         {
           label: t('Goals…'),
-          accelerator: 'CmdOrCtrl+,',
           click: () => sendToWindow({ type: 'stats' })
         },
         {
@@ -1314,6 +1375,9 @@ function buildMenu() {
     {
       label: t('View'),
       submenu: [
+        { label: 'Open Outline in Separate Window', accelerator: 'CmdOrCtrl+Shift+U',
+          click: () => sendToWindow({ type: 'detachOutline' }) },
+        { type: 'separator' },
         {
           label: t('Keyboard Shortcuts…'),
           accelerator: 'CmdOrCtrl+/',
@@ -1415,7 +1479,7 @@ ipcMain.handle('app:version', () => app.getVersion());
 
 ipcMain.handle('update:check', async () => {
   try {
-    const res = await fetch('https://api.github.com/repos/hughhowey/neo/releases/latest', {
+    const res = await fetch('https://api.github.com/repos/raycrews/neo-ai/releases/latest', {
       headers: { 'User-Agent': 'NEO-App' }
     });
     if (!res.ok) throw new Error('GitHub API returned ' + res.status);
@@ -1470,7 +1534,7 @@ function checkForUpdates() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Packaged builds get name/icon from electron-builder; this covers `npm start`.
   try {
     const devIcon = path.join(__dirname, 'build', 'icon.png');
@@ -1483,20 +1547,9 @@ app.whenReady().then(() => {
       });
     }
   } catch { /* cosmetic only */ }
-  // Startup discipline: the window is created first, and every other step is
-  // individually guarded so no single failure can leave the app running
-  // invisibly with no window.
+  // Resolve the saved library before opening an editor or running backups.
   try {
-    // the real Documents folder (handles OneDrive-redirected Windows setups)
-    try {
-      LIBRARY_DIR = path.join(app.getPath('documents'), 'NEO Library');
-      // …unless the writer chose their own folder (File → Library Folder…)
-      const chosen = readSettings().libraryDir;
-      if (chosen && fs.existsSync(chosen) && fs.statSync(chosen).isDirectory()) LIBRARY_DIR = chosen;
-      LIBRARY_FILE = path.join(LIBRARY_DIR, 'library.json');
-    } catch (err) {
-      logError('paths', err);
-    }
+    if (!await initializeLibraryLocation()) { app.quit(); return; }
 
     // macOS press-and-hold accent picker can open invisibly inside Chromium
     // and re-emit swallowed keys as phantom repeated letters. Within NEO,
@@ -1518,7 +1571,6 @@ app.whenReady().then(() => {
     }
 
     try { initLanguage(); } catch (err) { logError('language', err); }
-    try { ensureLibrary(); } catch (err) { logError('library', err); }
     createWindow();
     try { initSpell(); } catch (err) { logError('spell', err); }
     try { buildMenu(); } catch (err) { logError('menu', err); }
@@ -1531,9 +1583,11 @@ app.whenReady().then(() => {
       dialog.showErrorBox(t('NEO failed to start'),
         t('Please report this at github.com/hughhowey/neo/issues:') + '\n\n' + String((err && err.stack) || err));
     } catch { /* nothing left to try */ }
+    app.quit();
+    return;
   }
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!paneWindows.getOwner()) createWindow();
   });
 });
 

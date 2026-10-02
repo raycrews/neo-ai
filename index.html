@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>NEO</title>
+  <title>Neo-AI</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="workspace-navigation.css" />
+  <link rel="stylesheet" href="ai-chat.css" />
+  <link rel="stylesheet" href="appearance.css" />
+  <script src="appearance.js" defer></script>
 </head>
 <body>
   <!-- Draggable strip so the frameless window can be moved -->
@@ -12,11 +16,12 @@
   <!-- ======================= BOOKSHELF ======================= -->
   <div id="bookshelf-view">
     <header id="shelf-header">
-      <h1>NEO</h1>
+      <h1>NEO-AI</h1>
       <div class="shelf-header-right">
         <span id="author-chip" data-i18n-title title="Click to change your author name"></span>
-        <button id="import-btn" data-i18n-title title="Import .docx, .txt, or .md manuscripts">&#8681; <span data-i18n>Import</span></button>
-        <button id="add-shelf-btn" data-i18n-title title="Add a shelf">+ <span data-i18n>Shelf</span></button>
+        <button class="shelf-header-button open-app-settings" title="Open app settings">⚙ Settings</button>
+        <button id="import-btn" class="shelf-header-button" data-i18n-title title="Import .docx, .txt, or .md manuscripts">&#8681; <span data-i18n>Import</span></button>
+        <button id="add-shelf-btn" class="shelf-header-button" data-i18n-title title="Add a shelf">+ <span data-i18n>Shelf</span></button>
       </div>
     </header>
     <div id="shelves"></div>
@@ -66,14 +71,95 @@
   </div>
 
   <!-- ======================= EDITOR ======================= -->
-  <div id="editor-view" hidden>
+  <div id="editor-view" class="workspace-navigation" hidden>
 
-    <!-- Left hover zone: chapter navigation -->
-    <div id="nav-hotzone"></div>
-    <nav id="nav-pane">
-      <div id="nav-list"></div>
-      <button id="nav-add" data-i18n-title title="Add a chapter at the end">+ <span data-i18n>Chapter</span></button>
+    <div id="nav-hotzone" hidden></div>
+    <nav id="nav-pane" aria-label="Book navigation">
+      <div class="workspace-book">
+        <button id="back-to-shelf" data-i18n-title title="Back to your bookshelf">&#8676; <span data-i18n>Bookshelf</span></button>
+        <h2 id="workspace-book-title"></h2>
+        <span class="workspace-caption">WRITING WORKSPACE</span>
+      </div>
+      <div id="tabs">
+        <section class="workspace-group" aria-label="Writing">
+          <h3>Writing</h3>
+          <div class="workspace-root" data-section="manuscript">
+            <button class="tree-toggle" aria-label="Collapse Manuscript" aria-expanded="true">▾</button>
+            <button class="tab active" data-tab="manuscript" data-i18n>Manuscript</button>
+            <button class="tree-menu" aria-label="Add to Manuscript" title="Add to Manuscript">⋯</button>
+          </div>
+          <div id="nav-list" class="workspace-tree" data-section="manuscript"></div>
+          <button id="nav-add" hidden>+ Chapter</button>
+          <div class="workspace-outline-row workspace-root" data-section="outline">
+            <button class="tree-toggle" aria-label="Collapse Outline" aria-expanded="true">▾</button>
+            <button class="tab" data-tab="outline" data-i18n>Outline</button>
+            <button class="tree-menu" aria-label="Add to Outline" title="Add to Outline">⋯</button>
+            <button id="workspace-outline-window" title="Open outline in separate window" aria-label="Open outline in separate window">&#8599;</button>
+          </div>
+          <div class="workspace-tree" data-section="outline"></div>
+          <span id="workspace-outline-status" hidden>Open in separate window</span>
+        </section>
+        <section class="workspace-group" aria-label="Story reference">
+          <h3>Story reference</h3>
+          <div class="workspace-root" data-section="characters">
+            <button class="tree-toggle" aria-label="Collapse Characters" aria-expanded="true">▾</button>
+            <button class="tab" data-tab="characters">Characters</button>
+            <button class="tree-menu" aria-label="Add to Characters" title="Add to Characters">⋯</button>
+          </div>
+          <div class="workspace-tree" data-section="characters"></div>
+          <div class="workspace-root" data-section="locations">
+            <button class="tree-toggle" aria-label="Collapse Locations" aria-expanded="true">▾</button>
+            <button class="tab" data-tab="locations">Locations</button>
+            <button class="tree-menu" aria-label="Add to Locations" title="Add to Locations">⋯</button>
+          </div>
+          <div class="workspace-tree" data-section="locations"></div>
+          <div class="workspace-root" data-section="worldbuilding">
+            <button class="tree-toggle" aria-label="Collapse Worldbuilding" aria-expanded="true">▾</button>
+            <button class="tab" data-tab="worldbuilding">Worldbuilding</button>
+            <button class="tree-menu" aria-label="Add to Worldbuilding" title="Add to Worldbuilding">⋯</button>
+          </div>
+          <div class="workspace-tree" data-section="worldbuilding"></div>
+        </section>
+        <section class="workspace-group" aria-label="Notebook">
+          <h3>Notebook</h3>
+          <div class="workspace-root" data-section="research">
+            <button class="tree-toggle" aria-label="Collapse Research" aria-expanded="true">▾</button>
+            <button class="tab" data-tab="research">Research</button>
+            <button class="tree-menu" aria-label="Add to Research" title="Add to Research">⋯</button>
+          </div>
+          <div class="workspace-tree" data-section="research"></div>
+          <div class="workspace-root" data-section="notes">
+            <button class="tree-toggle" aria-label="Collapse Notes" aria-expanded="true">▾</button>
+            <button class="tab" data-tab="notes" data-i18n>Notes</button>
+            <button class="tree-menu" aria-label="Add to Notes" title="Add to Notes">⋯</button>
+          </div>
+          <div class="workspace-tree" data-section="notes"></div>
+          <div class="workspace-root" data-section="darlings">
+            <button class="tree-toggle" aria-label="Collapse Darlings" aria-expanded="true">▾</button>
+            <button class="tab darlings" data-tab="darlings" data-i18n data-i18n-title title="Drag documents, folders, or selected text here to keep them for later.">Darlings</button>
+            <button class="tree-menu" aria-label="Add to Darlings" title="Add to Darlings">⋯</button>
+          </div>
+          <div class="workspace-tree" data-section="darlings"></div>
+        </section>
+        <section class="workspace-group" aria-label="Assistant">
+          <h3>Assistant</h3>
+          <div class="workspace-root" data-section="ai-assistance">
+            <button class="tree-toggle" aria-label="Collapse AI Assistance" aria-expanded="true">▾</button>
+            <button class="tab" data-tab="ai-assistance">AI Assistance</button>
+            <button class="tree-menu" aria-label="Add to AI Assistance" title="Add to AI Assistance">⋯</button>
+          </div>
+          <div class="workspace-tree" data-section="ai-assistance"></div>
+        </section>
+      </div>
+      <div class="workspace-settings"><button class="open-app-settings" title="Open app settings">⚙ Settings</button></div>
     </nav>
+    <div id="workspace-resizer" role="separator" aria-label="Navigation width" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="380" aria-valuenow="264" tabindex="0"></div>
+    <header id="workspace-toolbar">
+      <button id="workspace-nav-toggle" aria-controls="nav-pane" aria-expanded="true" title="Hide navigation">&#9776;</button>
+      <span id="workspace-section-label">Manuscript</span>
+      <div id="document-formatting" role="toolbar" aria-label="Text formatting" hidden></div>
+      <button id="workspace-comments-toggle" aria-controls="side-pane" aria-pressed="false">Notes &amp; Comments</button>
+    </header>
 
     <!-- Right hover zone: notes & comments -->
     <div id="side-hotzone"></div>
@@ -87,6 +173,13 @@
 
     <!-- The manuscript -->
     <main id="paper-scroll">
+      <section id="workspace-section" aria-labelledby="workspace-section-title" hidden>
+        <span class="workspace-section-eyebrow">SECTION PREVIEW</span>
+        <h1 id="workspace-section-title"></h1>
+        <p id="workspace-section-description"></p>
+        <div id="workspace-section-topics"></div>
+        <p class="workspace-section-status">This section is ready for its features to be built.</p>
+      </section>
       <div id="paper">
         <div id="title-page" class="sheet">
           <div id="tp-title" contenteditable="true" spellcheck="false" data-i18n-ph data-ph="Untitled"></div>
@@ -104,16 +197,18 @@
       </div>
     </main>
 
-    <!-- Bottom bar: tabs + counters -->
+    <!-- Bottom bar: writing counters -->
     <footer id="bottombar">
-      <button id="back-to-shelf" data-i18n-title title="Back to your bookshelf">&#8676; <span data-i18n>Shelf</span></button>
-      <div id="tabs">
-        <div class="tab active" data-tab="manuscript" data-i18n>Manuscript</div>
-        <div class="tab" data-tab="notes" data-i18n>Notes</div>
-        <div class="tab" data-tab="outline" data-i18n>Outline</div>
-        <div class="tab darlings" data-tab="darlings" data-i18n data-i18n-title title="Drag any selection here. It's saved, not gone.">Darlings</div>
-      </div>
+      <span class="workspace-footer-label">NEO-AI</span>
       <div id="counters">
+        <button id="document-progress" class="word-progress" type="button">
+          <span class="word-progress-caption"><span>Document</span><span class="word-progress-count"></span></span>
+          <progress max="1" value="0" aria-label="Document word goal"></progress>
+        </button>
+        <button id="manuscript-progress" class="word-progress" type="button">
+          <span class="word-progress-caption"><span>Manuscript</span><span class="word-progress-count"></span></span>
+          <progress max="1" value="0" aria-label="Manuscript word goal"></progress>
+        </button>
         <span id="goal-counter" data-i18n-title title="Today's words — click for goals, sprints, and your progress chart"></span>
         <span id="pos-counter"></span>
         <span id="word-counter" data-i18n-title title="Click to cycle book / chapter word count"></span>
@@ -140,6 +235,22 @@
 
   <script src="i18n.js"></script>
   <script src="covers.js"></script>
+  <script src="workspace-tree-model.js"></script>
+  <script src="chat-context.js"></script>
+  <script src="document-rich-text.js"></script>
   <script src="app.js"></script>
+  <script src="workspace-navigation.js"></script>
+  <script src="workspace-tree.js"></script>
+  <script src="workspace-progress.js"></script>
+  <script src="workspace-context.js"></script>
+  <script src="workspace-chats.js"></script>
+  <script src="workspace-panes.js"></script>
+  <script src="assistant-types.js"></script>
+  <script src="node_modules/markdown-it/dist/browser/markdown-it.umd.min.js"></script>
+  <script src="chat-markdown.js"></script>
+  <script src="ai-context-budget.js"></script><script src="ai-chat.js"></script>
+  <script src="ai-context-picker.js"></script>
+  <script src="workspace-ai.js"></script>
+  <script src="document-toolbar.js"></script>
 </body>
 </html>

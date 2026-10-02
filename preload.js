@@ -1,6 +1,31 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
+contextBridge.exposeInMainWorld('neoAppearance', {
+  read: () => ipcRenderer.invoke('appearance:read'),
+  onChange: callback => ipcRenderer.on('appearance:changed', (_event, value) => callback(value))
+});
+contextBridge.exposeInMainWorld('neoChat', {
+  read: id => ipcRenderer.invoke('chat:read', id),
+  context: id => ipcRenderer.invoke('chat:context', id),
+  budget: (bookId, id, draft, preview) => ipcRenderer.invoke('chat:budget', bookId, id, draft, preview),
+  setContextLimit: (bookId, profileId, model, limit) => ipcRenderer.invoke('chat:limit', bookId, profileId, model, limit),
+  action: (id, action) => ipcRenderer.invoke('chat:action', id, action),
+  connections: id => ipcRenderer.invoke('chat:connections', id),
+  models: (id, profileId) => ipcRenderer.invoke('chat:models', id, profileId),
+  exportConversation: (id, conversationId) => ipcRenderer.invoke('chat:export', id, conversationId),
+  flush: id => ipcRenderer.invoke('chat:flush', id),
+  onContextChanged: callback => ipcRenderer.on('chat:contextChanged', () => callback()),
+  onState: callback => ipcRenderer.on('chat:state', (_event, value) => callback(value))
+});
 
 contextBridge.exposeInMainWorld('neo', {
+  openSettings: () => ipcRenderer.invoke('settings:open'),
+  openPane: (kind) => ipcRenderer.invoke('panes:open', kind),
+  flushPanes: () => ipcRenderer.invoke('panes:flush'),
+  flushChatDrafts: () => ipcRenderer.invoke('panes:flushChatDrafts'),
+  publishPaneState: (state) => ipcRenderer.send('panes:publish', state),
+  replyPaneCommand: (reply) => ipcRenderer.send('panes:reply', reply),
+  onPaneCommand: (callback) => ipcRenderer.on('panes:command', (_event, command) => callback(command)),
+  onPaneState: (callback) => ipcRenderer.on('panes:state', (_event, state) => callback(state)),
   readLibrary: () => ipcRenderer.invoke('library:read'),
   writeLibrary: (data) => ipcRenderer.invoke('library:write', data),
 

@@ -66,6 +66,8 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 // Platform-aware key labels: Macs read ⌘⇧X, everyone else reads Ctrl+Shift+X
 const IS_MAC = navigator.platform.toLowerCase().includes('mac');
+// Only the inset macOS title bar needs a draggable strip inside the page.
+document.documentElement.classList.toggle('native-titlebar', !IS_MAC);
 const K = (mac, pc) => (IS_MAC ? mac : pc);
 const KZ = K('⌘Z', 'Ctrl+Z');
 const KPH = K('⌘⇧X', 'Ctrl+Shift+X');
@@ -718,7 +720,24 @@ function paintable(meta) {
 }
 
 function bookPlainText() {
-  return book.chapterOrder.map((id) => chapterText(id)).join('\n\n');
+  const allowed = typeof WorkspaceTree !== 'undefined' ? new Set(WorkspaceTree.contextDocuments(WorkspaceTree.reconcile(book)).filter(item => item.section === 'manuscript').map(item => item.id)) : null;
+  return book.chapterOrder.filter(id => !allowed || allowed.has(id)).map((id) => chapterText(id)).join('\n\n');
+}
+
+async function coverContextText(meta) {
+  const live = book && book.id === meta.id ? book : await window.neo.readBookMeta(meta.id);
+  if (!live) return '';
+  const allowed = typeof WorkspaceTree !== 'undefined' ? new Set(WorkspaceTree.contextDocuments(WorkspaceTree.reconcile(live))
+    .filter(item => item.section === 'manuscript').map(item => item.id)) : null;
+  const parts = [];
+  for (const id of live.chapterOrder || []) {
+    if (allowed && !allowed.has(id)) continue;
+    const holder = document.createElement('div');
+    holder.innerHTML = live === book ? chapterHTML[id] || '' : await window.neo.readChapter(live.id, id);
+    holder.querySelectorAll('.darling-anchor, .ph-mark, .ghost').forEach(node => node.remove());
+    parts.push(holder.innerText);
+  }
+  return parts.join('\n\n');
 }
 
 // Paint the open book, or a book on the shelf (text is read from disk then).
@@ -736,17 +755,8 @@ async function requestPaint(meta, text) {
   if (book && book.id === meta.id) scheduleMetaSave();
   else await window.neo.writeBookMeta(meta.id, meta);
   markPainting(meta.id, true);
-  if (text == null) {
-    const m = await window.neo.readBookMeta(meta.id);
-    const parts = [];
-    for (const chId of (m && m.chapterOrder) || []) {
-      const holder = document.createElement('div');
-      holder.innerHTML = await window.neo.readChapter(meta.id, chId);
-      holder.querySelectorAll('.darling-anchor, .ph-mark, .ghost').forEach((n) => n.remove());
-      parts.push(holder.innerText);
-    }
-    text = parts.join('\n\n');
-  }
+  // Rebuild context from the current settings even if the caller supplied text.
+  if (text == null || typeof WorkspaceTree !== 'undefined') text = await coverContextText(meta);
   const cs = coverSettings();
   const mine = (cs.models && cs.models[provider]) || {};
   let res = null;
@@ -1050,6 +1060,13 @@ $('#author-chip').onclick = async () => {
 /* ================================================================== */
 
 async function openBook(bookId) {
+  if (window.neoChatView) {
+    try { await window.neoChatView.flush(); } catch (error) { toast(error.message, 7000); return; }
+  }
+  if (typeof treeMoveBusy !== 'undefined' && treeMoveBusy) { toast('Finishing the move…'); return; }
+  if (window.neo.flushPanes) {
+    try { await window.neo.flushPanes(); } catch (error) { toast(error.message, 7000); return; }
+  }
   tabPlaces = {}; // a fresh book starts with fresh places
   book = await window.neo.readBookMeta(bookId);
   if (!book) return;
@@ -1123,6 +1140,9 @@ function renderChapters() {
     sec.dataset.id = chId;
     const head = document.createElement('div');
     head.className = 'chapter-head';
+    // Desktop tree documents are not numbered chapters. Their names belong
+    // in navigation, not in the author's manuscript text.
+    head.hidden = typeof WorkspaceTree !== 'undefined';
     head.title = t('Right-click for chapter options · click after the number to add a title');
     const num = document.createElement('span');
     num.className = 'ch-num';
@@ -1960,7 +1980,7 @@ function sceneBreakDelete(e, body, chId) {
 
 // Read a body's HTML for saving:
 function captureBody(body) {
-  return body.innerHTML;
+  return DocumentRichText.serialize(body);
 }
 
 function syncChapter(body, chId) {
@@ -2018,6 +2038,9 @@ document.addEventListener('selectionchange', () => {
 // spans — so every block boundary and <br> becomes a paragraph break, and
 // styling that only lives in a style attribute is read as bold/italic.
 function cleanPasteHtml(html) {
+  // Preserve structured writing copied from chat or a rich document. The
+  // shared sanitizer drops all resources, event handlers and arbitrary styles.
+  if (/<(?:h[1-6]|ul|ol|blockquote|pre|table)\b/i.test(html)) return DocumentRichText.clean(html);
   const holder = document.createElement('div');
   holder.innerHTML = html;
   holder.querySelectorAll('script,style,meta,link,img,table,head,title').forEach((n) => n.remove());
@@ -2194,6 +2217,7 @@ function titleEnter(e) {
 }
 $('#tp-title').addEventListener('input', () => {
   book.title = $('#tp-title').textContent.trim() || t('Untitled');
+  if (typeof updateWorkspaceNavigation === 'function') updateWorkspaceNavigation();
   scheduleMetaSave();
 });
 $('#tp-subtitle').addEventListener('input', () => {
@@ -2488,6 +2512,8 @@ let navRefreshPending = false;
 
 function renderNav() {
   if (!book) return; // a refresh queued just before the shelf came back
+  if (typeof updateWorkspaceNavigation === 'function') updateWorkspaceNavigation();
+  if (typeof renderWorkspaceTrees === 'function') { renderWorkspaceTrees(); return; }
   // Replacing the source row during a native drag can interrupt its lifecycle.
   if (chapterDragActive) { navRefreshPending = true; return; }
   navRefreshPending = false;
@@ -2509,6 +2535,12 @@ function renderNav() {
 
     // the row is the drag handle, so the note below stays freely editable
     const rowEl = item.querySelector('.n-row');
+    rowEl.tabIndex = 0;
+    rowEl.setAttribute('role', 'button');
+    rowEl.setAttribute('aria-label', item.querySelector('.n-label').textContent);
+    rowEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); item.click(); }
+    });
     rowEl.draggable = true;
     rowEl.addEventListener('dragstart', (e) => {
       e.dataTransfer.setData('application/x-neo-chapter', chId);
@@ -2580,6 +2612,7 @@ function navDropInd() {
   return ind;
 }
 navList.addEventListener('dragover', (e) => {
+  if (typeof renderWorkspaceTrees === 'function') return;
   if (!e.dataTransfer.types.includes('application/x-neo-chapter')) return;
   e.preventDefault();
   const ind = navDropInd();
@@ -2601,6 +2634,7 @@ navList.addEventListener('dragleave', (e) => {
   if (ind) ind.remove();
 });
 navList.addEventListener('drop', async (e) => {
+  if (typeof renderWorkspaceTrees === 'function') return;
   const chId = e.dataTransfer.getData('application/x-neo-chapter');
   if (!chId) return;
   e.preventDefault();
@@ -2626,6 +2660,9 @@ navList.addEventListener('drop', async (e) => {
 
 function highlightNav() {
   $$('.nav-item').forEach((el) => el.classList.toggle('current', el.dataset.id === currentChapterId));
+  if (typeof updateWorkspaceNavigation === 'function') updateWorkspaceNavigation();
+  if (typeof schedulePaneState === 'function') schedulePaneState();
+  if (typeof updateWorkspaceProgress === 'function') updateWorkspaceProgress();
 }
 
 function scheduleNavRefresh() {
@@ -2687,7 +2724,11 @@ $('#side-pin').onclick = () => {
 /* ================================================================== */
 
 $$('.tab').forEach((tab) => {
-  tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+  tab.addEventListener('click', () => {
+    if (typeof selectWorkspaceRoot === 'function') selectWorkspaceRoot();
+    if ($('#workspace-nav-toggle') && tab.dataset.tab === 'outline' && typeof outlineDetached !== 'undefined' && outlineDetached) detachOutline();
+    else switchTab(tab.dataset.tab);
+  });
   tab.addEventListener('dblclick', async () => {
     const kind = tab.dataset.tab;
     if (kind !== 'notes' && kind !== 'outline') return;
@@ -2695,6 +2736,7 @@ $$('.tab').forEach((tab) => {
     if (!name) return;
     book.tabNames[kind] = name;
     tab.textContent = name;
+    if (typeof updateWorkspaceNavigation === 'function') updateWorkspaceNavigation();
     saveMeta();
     // Renamed tabs become the default for future books
     library.tabDefaults = library.tabDefaults || {};
@@ -2720,12 +2762,14 @@ document.addEventListener('dragstart', (e) => {
 document.addEventListener('dragend', () => { $('#bottombar').classList.remove('attn'); draggedRange = null; });
 
 darlingsTab.addEventListener('dragover', (e) => {
+  if (e.dataTransfer.types.includes('application/x-neo-tree')) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
   darlingsTab.classList.add('drag-over');
 });
 darlingsTab.addEventListener('dragleave', () => darlingsTab.classList.remove('drag-over'));
 darlingsTab.addEventListener('drop', async (e) => {
+  if (e.dataTransfer.types.includes('application/x-neo-tree')) return;
   e.preventDefault();
   darlingsTab.classList.remove('drag-over');
   const html = e.dataTransfer.getData('text/html');
@@ -2910,7 +2954,9 @@ function darlingFromKeyboard() {
 // well — for as long as the book is open.
 let tabPlaces = {};
 
-function switchTab(name) {
+function switchTab(name, keepWorkspaceSelection = false) {
+  if (!keepWorkspaceSelection && typeof selectWorkspaceRoot === 'function') selectWorkspaceRoot();
+  if (typeof detachButton !== 'undefined') detachButton.hidden = name !== 'outline';
   const scroller = $('#paper-scroll');
   if (book && currentTab && currentTab !== name) {
     tabPlaces[currentTab] = currentTab === 'manuscript'
@@ -2918,7 +2964,9 @@ function switchTab(name) {
       : { scroll: scroller.scrollTop };
   }
   currentTab = name;
+  if (typeof updateWorkspaceProgress === 'function') updateWorkspaceProgress();
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  if (typeof updateWorkspaceNavigation === 'function') updateWorkspaceNavigation();
   if (spellOn) setTimeout(scanSpellingHere, 0);
   const paper = $('#paper');
   const aux = $('#aux-paper');
@@ -2930,6 +2978,14 @@ function switchTab(name) {
 
   // stash whatever aux content was open
   flushAux();
+
+  if (typeof showWorkspaceSection === 'function' && showWorkspaceSection(name)) {
+    paper.hidden = true;
+    aux.hidden = true;
+    auxEditor.hidden = true;
+    scroller.scrollTop = back?.scroll || 0;
+    return;
+  }
 
   if (name === 'manuscript') {
     paper.hidden = false;
@@ -2952,14 +3008,16 @@ function switchTab(name) {
   } else if (name === 'outline') {
     $('#aux-title').textContent = tabName('outline');
     oList.hidden = false;
-    if (book.chapterOrder.length === 0) createChapterAt(0);
+    if (book.chapterOrder.length === 0 && typeof WorkspaceTree === 'undefined') createChapterAt(0);
     renderOutline();
     returnTo();
   } else {
     $('#aux-title').textContent = tabName(name);
     auxEditor.hidden = false;
     auxEditor.dataset.kind = name;
-    window.neo.readAux(book.id, name).then((html) => {
+    const requestedBookId = book.id;
+    window.neo.readAux(requestedBookId, name).then((html) => {
+      if (book?.id !== requestedBookId || currentTab !== name) return;
       auxEditor.innerHTML = html || '';
       auxEditor.focus({ preventScroll: true });
       returnTo();
@@ -3036,6 +3094,8 @@ function outlineLine(kind, chId, secId, index, label, text) {
     }
     scheduleMetaSave();
   };
+
+  txt.addEventListener('input', save);
 
   txt.addEventListener('blur', () => {
     save();
@@ -3247,8 +3307,9 @@ function scheduleAuxSave() {
 function flushAux() {
   if (!auxDirty || !book) return;
   const kind = $('#aux-editor').dataset.kind;
-  if (kind) window.neo.writeAux(book.id, kind, $('#aux-editor').innerHTML);
+  const write = kind ? window.neo.writeAux(book.id, kind, DocumentRichText.serialize($('#aux-editor'))) : Promise.resolve();
   auxDirty = false;
+  return write;
 }
 
 function renderDarlings() {
@@ -3352,6 +3413,7 @@ function bookWordCount() {
 
 function updateCounters() {
   if (!book) return;
+  if (typeof schedulePaneState === 'function') schedulePaneState();
   const total = bookWordCount();
   const wc = $('#word-counter');
   if (wordMode === 'book') {
@@ -3368,6 +3430,10 @@ function updateCounters() {
     : (idx >= 0
       ? t('chapter {ch} of {total}', { ch: idx + 1, total: book.chapterOrder.length })
       : t('{n} chapters', { n: book.chapterOrder.length }));
+  if (typeof WorkspaceTree !== 'undefined') {
+    pos.textContent = idx >= 0 ? `document ${idx + 1} of ${book.chapterOrder.length}` : `${book.chapterOrder.length} documents`;
+    if (wordMode !== 'book') wc.textContent = `${currentChapterId ? chapterWords(currentChapterId) : 0} words in document`;
+  }
   // cache for the bookshelf progress bar
   if (book.wordCount !== total) {
     // only a true crossing earns a painting — a story that was already long
@@ -3380,6 +3446,10 @@ function updateCounters() {
     }
   }
   trackDailyWords(total);
+  if (typeof updateWorkspaceProgress === 'function') {
+    wc.hidden = true;
+    updateWorkspaceProgress();
+  }
 }
 
 // ---- daily word tracking + goal display ----
@@ -3436,6 +3506,7 @@ document.addEventListener('selectionchange', () => {
       const n = countWords(sel.toString());
       if (n > 0) {
         $('#word-counter').textContent = t('{n} selected', { n });
+        $('#word-counter').hidden = false;
         return;
       }
     }
@@ -3446,6 +3517,7 @@ document.addEventListener('selectionchange', () => {
 
 // track which chapter you're scrolled to
 $('#paper-scroll').addEventListener('scroll', () => {
+  if (currentTab !== 'manuscript' || (typeof workspaceSelection !== 'undefined' && workspaceSelection)) return;
   clearTimeout(saveTimers.scroll);
   saveTimers.scroll = setTimeout(() => {
     const mid = window.innerHeight * 0.4;
@@ -3501,11 +3573,14 @@ function metaSig(m) {
 }
 
 function scheduleMetaSave() {
+  if (typeof schedulePaneState === 'function') schedulePaneState();
   clearTimeout(saveTimers.meta);
   saveTimers.meta = setTimeout(saveMeta, 800);
 }
 async function saveMeta() {
   if (!book) return;
+  if (typeof WorkspaceTree !== 'undefined') WorkspaceTree.reconcile(book);
+  if (typeof schedulePaneState === 'function') schedulePaneState();
   const sig = metaSig(book);
   const stamp = await window.neo.writeBookMeta(book.id, book);
   if (book && typeof stamp === 'string') book.modified = stamp;
@@ -3514,6 +3589,7 @@ async function saveMeta() {
 
 function flushAllSaves() {
   if (!book) return;
+  const writes = [];
   // remember where you were for next session
   const pos = { chapterId: currentChapterId, scroll: $('#paper-scroll').scrollTop };
   const moved = !book.lastPosition || book.lastPosition.chapterId !== pos.chapterId ||
@@ -3521,11 +3597,12 @@ function flushAllSaves() {
   book.lastPosition = pos;
   for (const chId of book.chapterOrder) {
     if (chapterHTML[chId] !== undefined && chapterHTML[chId] !== savedHTML[chId]) {
-      persistChapter(chId);
+      writes.push(persistChapter(chId));
     }
   }
-  flushAux();
-  if (moved || metaSig(book) !== savedMetaSig) saveMeta();
+  writes.push(flushAux());
+  if (moved || metaSig(book) !== savedMetaSig) writes.push(saveMeta());
+  return Promise.all(writes);
 }
 
 /* ================================================================== */
@@ -3540,6 +3617,7 @@ function flushAllSaves() {
 
 let refreshing = false;
 async function refreshFromDisk() {
+  if (typeof treeMoveBusy !== 'undefined' && treeMoveBusy) return;
   if (refreshing) return;
   refreshing = true;
   try {
@@ -3636,9 +3714,17 @@ window.addEventListener('blur', () => { if (book) flushAllSaves(); });
 setInterval(() => { if (book) flushAllSaves(); }, 20000);
 
 async function backToShelf() {
-  flushAllSaves();
+  if (window.neoChatView) {
+    try { await window.neoChatView.flush(); } catch (error) { toast(error.message, 7000); return; }
+  }
+  if (typeof treeMoveBusy !== 'undefined' && treeMoveBusy) { toast('Finishing the move…'); return; }
+  if (window.neo.flushPanes) {
+    try { await window.neo.flushPanes(); } catch (error) { toast(error.message, 7000); return; }
+  }
+  await flushAllSaves();
   tabPlaces = {};
   book = null;
+  if (typeof publishPaneState === 'function') publishPaneState();
   currentChapterId = null;
   undoStack = [];
   $('#editor-view').hidden = true;
@@ -3735,6 +3821,12 @@ function resetNativeUndo() {
 
 function snapshotStructure(label, opts) {
   if (!book) return;
+  if (opts?.referenceSection) {
+    undoStack.push({ label, referenceSection: opts.referenceSection,
+      removedNode: JSON.parse(JSON.stringify(opts.removedNode)), parentId: opts.parentId, index: opts.index });
+    if (undoStack.length > 10) undoStack.shift();
+    return;
+  }
   undoStack.push({
     label,
     rejoin: !!(opts && opts.rejoin),
@@ -3744,6 +3836,7 @@ function snapshotStructure(label, opts) {
     chapterTitles: { ...(book.chapterTitles || {}) },
     chapterNotes: { ...(book.chapterNotes || {}) },
     sectionNotes: JSON.parse(JSON.stringify(book.sectionNotes || {})),
+    manuscriptTree: book.workspaceTree ? JSON.parse(JSON.stringify(book.workspaceTree.manuscript)) : null,
     darlings: JSON.parse(JSON.stringify(darlings)),
     stickies: JSON.parse(JSON.stringify(stickies))
   });
@@ -3751,13 +3844,39 @@ function snapshotStructure(label, opts) {
 }
 
 async function structuralUndo() {
+  if (typeof treeMoveBusy !== 'undefined' && treeMoveBusy) return;
+  const pending = undoStack[undoStack.length - 1];
+  if (pending?.treeMove && book) {
+    const move = pending.treeMove;
+    const nodes = WorkspaceTree.reconcile(book)[move.targetSection];
+    const parent = move.parentId && WorkspaceTree.find(nodes, move.parentId)?.node;
+    const parentId = parent?.type === 'folder' ? parent.id : null;
+    const children = WorkspaceTree.children(nodes, parentId);
+    const beforeId = children.some(node => node.id === move.beforeId) ? move.beforeId : null;
+    await moveWorkspaceItem(move.section, move.id, parentId, beforeId, move.targetSection, false);
+    undoStack.pop();
+    return;
+  }
   const snap = undoStack.pop();
   if (!snap || !book) return;
+  if (snap.referenceSection) {
+    const nodes = book.workspaceTree[snap.referenceSection];
+    if (!WorkspaceTree.find(nodes, snap.removedNode.id)) {
+      const parent = snap.parentId && WorkspaceTree.find(nodes, snap.parentId)?.node;
+      const destination = parent?.type === 'folder' ? parent.children : nodes;
+      destination.splice(Math.min(snap.index, destination.length), 0, snap.removedNode);
+    }
+    await saveMeta();
+    renderNav();
+    switchTab(currentTab);
+    return;
+  }
   book.chapterOrder = snap.chapterOrder;
   chapterHTML = snap.chapterHTML;
   book.chapterTitles = snap.chapterTitles;
   book.chapterNotes = snap.chapterNotes;
   book.sectionNotes = snap.sectionNotes;
+  if (snap.manuscriptTree && book.workspaceTree) book.workspaceTree.manuscript = snap.manuscriptTree;
   darlings = snap.darlings;
   stickies = snap.stickies;
   // resurrect any chapter files the action may have deleted
@@ -4194,6 +4313,9 @@ async function changeSpellLanguage(code) {
 // right-click a flagged word for suggestions
 document.addEventListener('contextmenu', async (e) => {
   if (!spellOn) return;
+  // A selected passage gets the ordinary Copy/Cut menu, even if the pointer
+  // happens to be over a flagged word. A single word still has suggestions.
+  if (!window.getSelection().isCollapsed) return;
   const editor = e.target.closest && e.target.closest('.chapter-body, #aux-editor');
   if (!editor) return;
   const pos = document.caretRangeFromPoint(e.clientX, e.clientY);
@@ -4984,6 +5106,7 @@ function parasFromHtml(html) {
     if (brk) brk.remove();
   });
   holder.querySelectorAll('.darling-anchor, .ph-mark, .ghost').forEach((n) => n.remove());
+  DocumentRichText.prepareExport(holder);
   return [...holder.querySelectorAll('p')].map((p) => {
     const sceneBreak = p.classList.contains('scene-break');
     const poetry = p.classList.contains('poetry');
@@ -5013,12 +5136,12 @@ function exportChapters() {
     const paras = parasFromHtml(el ? el.innerHTML : (chapterHTML[chId] || ''));
     const chTitle = (book.chapterTitles || {})[chId];
     // chapterless stories export as continuous text
-    const heading = book.chapterOrder.length === 1
+    const heading = book.workspaceTree || book.chapterOrder.length === 1
       ? ''
       : library.exportCustomChapterTitles && chTitle
         ? chTitle
         : t('Chapter {n}', { n: i + 1 }) + (chTitle ? ' — ' + chTitle : '');
-    return { num: i + 1, heading, paras };
+    return { num: i + 1, heading, navigationTitle: chTitle || `Document ${i + 1}`, paras };
   });
 }
 
@@ -5276,7 +5399,7 @@ function chapterXhtml(ch, d) {
   return `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-<head><title>${escXml(ch.heading || d.title)}</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
+<head><title>${escXml(ch.heading || ch.navigationTitle || d.title)}</title><link rel="stylesheet" type="text/css" href="style.css"/></head>
 <body><section epub:type="chapter">${ch.heading ? `<h1>${escXml(ch.heading)}</h1>` : ''}
 ${paras}
 </section></body></html>`;
@@ -5296,9 +5419,9 @@ async function buildEpubEntries(data) {
   const chItems = chapters.map((ch) =>
     `<item id="ch${ch.num}" href="ch${ch.num}.xhtml" media-type="application/xhtml+xml"/>`).join('\n');
   const chSpine = chapters.map((ch) => `<itemref idref="ch${ch.num}"/>`).join('\n');
-  const navPoints = chapters.map((ch) => `<li><a href="ch${ch.num}.xhtml">${escXml(ch.heading || d.title)}</a></li>`).join('\n');
+  const navPoints = chapters.map((ch) => `<li><a href="ch${ch.num}.xhtml">${escXml(ch.heading || ch.navigationTitle || d.title)}</a></li>`).join('\n');
   const ncxPoints = chapters.map((ch) => `
-<navPoint id="ch${ch.num}" playOrder="${ch.num + 1}"><navLabel><text>${escXml(ch.heading || d.title)}</text></navLabel><content src="ch${ch.num}.xhtml"/></navPoint>`).join('');
+<navPoint id="ch${ch.num}" playOrder="${ch.num + 1}"><navLabel><text>${escXml(ch.heading || ch.navigationTitle || d.title)}</text></navLabel><content src="ch${ch.num}.xhtml"/></navPoint>`).join('');
 
   const entries = [
     { path: 'mimetype', content: 'application/epub+zip', store: true },
@@ -5413,10 +5536,10 @@ async function shelfExportData(shelf, anthologyTitle) {
       if (!paras.length) continue;
       num++;
       const chTitle = (meta.chapterTitles || {})[meta.chapterOrder[i]];
-      const heading = !multi
+      const heading = meta.workspaceTree ? (i === 0 ? meta.title : '') : !multi
         ? meta.title
         : (i === 0 ? meta.title : `${meta.title} — ${t('Chapter {n}', { n: i + 1 })}${chTitle ? ': ' + chTitle : ''}`);
-      sections.push({ num, heading, paras });
+      sections.push({ num, heading, navigationTitle: chTitle || meta.title, paras });
     }
   }
   return {
@@ -5584,6 +5707,7 @@ async function showAbout() {
 }
 
 window.neo.onMenu(async (msg) => {
+  if (msg.type === 'detachOutline' && typeof detachOutline === 'function') detachOutline();
   if ($('#keyboard-shortcuts') && msg.type !== 'help') return;
   if (msg.type === 'help') showHelp();
   if (msg.type === 'about') showAbout();
@@ -5615,6 +5739,9 @@ window.neo.onMenu(async (msg) => {
   }
   if (msg.type === 'poetry') togglePoetry();
   if (msg.type === 'uiLanguage') {
+    if (window.neo.flushPanes) {
+      try { await window.neo.flushPanes(); } catch (error) { toast(error.message, 7000); return; }
+    }
     // save every open page, then reload the window in the new language
     flushAllSaves();
     try { if (book && !$('#editor-view').hidden) sessionStorage.setItem('neo-reopen', book.id); } catch { /* a nicety */ }

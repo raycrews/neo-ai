@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings — Neo-AI</title>
+  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="appearance.css">
+  <script src="appearance.js" defer></script>
+</head>
+<body>
+  <aside class="settings-nav">
+    <header><span class="eyebrow">NEO-AI</span><h1>Settings</h1><p>Preferences for this device</p></header>
+    <nav aria-label="Settings categories">
+      <button data-page="general">General</button>
+      <button data-page="ai">AI</button>
+      <button data-page="connections" aria-current="page">AI Connections</button>
+    </nav>
+    <footer>Book content and AI context choices stay with each book.</footer>
+  </aside>
+  <main>
+    <section id="general" hidden>
+      <span class="eyebrow">APPLICATION</span><h2>General</h2>
+      <p class="intro">Choose your library and personalize this device.</p>
+      <div class="info-card"><div class="general-heading"><h3>Library folder</h3><button id="browse-library" type="button">Browse…</button></div><p id="library-path"></p><p class="muted">Open an existing library or choose an empty folder for a new one. Neo-AI saves your work and restarts there. Your current books stay in their current folder.</p><p id="library-status" role="status"></p></div>
+      <div class="info-card"><h3>Appearance</h3>
+        <label for="appearance-theme">Theme</label><select id="appearance-theme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">Follow system</option></select>
+        <label id="accent-label">Accent color</label><div id="accent-swatches" role="group" aria-labelledby="accent-label"></div>
+        <div class="custom-accent"><label for="accent-color">Custom color</label><input id="accent-color" type="color" value="#c9a86a"><span id="accent-value"></span></div>
+        <p class="hint">Changes apply immediately to all windows and are saved on this device. Manuscript paper is set separately under View → Page.</p>
+        <button id="appearance-defaults" type="button">Restore defaults</button><p id="appearance-status" role="status" aria-live="polite"></p>
+      </div>
+      <p id="app-version" class="muted"></p>
+    </section>
+    <section id="ai" hidden>
+      <span class="eyebrow">AI</span><h2>Assistant instructions</h2>
+      <p class="intro">Set how each assistant helps you. Choose the assistant type in each chat.</p>
+      <form id="assistant-form">
+        <fieldset id="assistant-fields" disabled>
+          <label for="assistant-type">Assistant type</label><select id="assistant-type"></select>
+          <label for="assistant-instructions">Purpose-specific instructions</label>
+          <textarea id="assistant-instructions" rows="14" maxlength="12000" required aria-describedby="assistant-help"></textarea>
+          <p id="assistant-help" class="hint">Saved on this device. Changes apply to the next message in all chats using this assistant type. Chat history and chosen context stay with each chat. These instructions do not grant access to additional documents or tools.</p>
+          <div class="form-actions"><button type="submit" class="primary" id="save-assistant">Save instructions</button><button type="button" id="revert-assistant">Revert</button><button type="button" id="restore-assistant">Restore default</button></div>
+          <p class="hint">Restore default fills the editor. Save instructions to apply it.</p>
+        </fieldset>
+      </form>
+      <p id="assistant-status" role="status" aria-live="polite"></p>
+    </section>
+    <section id="connections">
+      <span class="eyebrow">AI</span><h2>Connections</h2>
+      <p class="intro">Connect a local model or an online provider. Choose one default for AI Assistance.</p>
+      <div class="connection-layout">
+        <aside class="profile-pane"><div class="list-heading">Saved connections</div><div id="profiles" role="group" aria-label="Saved connections"></div><button id="add-profile">+ New connection</button></aside>
+        <div class="connection-detail">
+          <form id="profile-form" autocomplete="off">
+            <fieldset id="fields">
+              <div class="form-heading"><h3 id="form-title">New connection</h3><span id="unsaved" hidden>Unsaved changes</span></div>
+              <div class="two-columns">
+                <label>Connection name<input id="profile-name" maxlength="100" required placeholder="My local model"></label>
+                <label>Connection type<select id="provider"><option value="lmstudio">LM Studio</option><option value="ollama">Ollama</option><option value="openai">OpenAI</option><option value="compatible">Compatible server</option></select></label>
+              </div>
+              <label>Server base URL<input id="base-url" type="url" required spellcheck="false" placeholder="http://localhost:1234/v1"></label>
+              <p class="hint">Include /v1 for these presets. Localhost uses this computer; a LAN address can point to another machine. Use HTTPS for remote services.</p>
+              <label>API format<select id="api-format"><option value="chat">Chat Completions (compatible servers)</option><option value="responses">Responses</option></select></label>
+              <div class="key-heading"><label for="api-key">API key or token <span class="muted">(optional for local servers)</span></label><span id="key-status"></span></div>
+              <div class="key-row"><input id="api-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="Enter a key if required" aria-describedby="storage-note"><button id="remove-key" type="button">Remove key</button></div>
+              <p id="storage-note" class="hint"></p>
+              <label>Model<input id="model" spellcheck="false" maxlength="200" placeholder="Select an available model or enter an exact model ID"></label>
+              <p class="hint">Use Discover models to browse the server’s models, or enter a model name manually.</p>
+              <section id="model-browser" aria-labelledby="model-browser-title" hidden>
+                <div class="model-browser-heading"><label id="model-browser-title" for="available-models">Available models</label><span id="model-count" role="status"></span></div>
+                <select id="available-models" aria-describedby="model-count"></select>
+                <p id="model-empty" class="hint" hidden></p>
+                <p class="hint">Select a model, then Save connection.</p>
+              </section>
+              <details id="response-settings" class="response-settings">
+                <summary>Response settings</summary>
+                <p class="hint" id="response-model-label"></p>
+                <fieldset id="response-fields">
+                  <div class="two-columns">
+                    <label>Maximum reply tokens<input id="reply-tokens" type="number" min="1" max="131072" step="1" required value="4096"></label>
+                    <label>Creativity (temperature)<input id="response-temperature" type="number" min="0" max="2" step="any" placeholder="Provider default"></label>
+                  </div>
+                  <p class="hint">Reply tokens set an upper limit, including reasoning tokens where applicable. The model may finish sooner. Higher temperature usually gives more varied replies. Leave temperature blank if your model does not support it. The provider may impose narrower limits.</p>
+                  <button id="reset-response" type="button">Restore response defaults</button>
+                </fieldset>
+                <p class="hint">Saved for this connection and model with Save connection. Applies to the next reply in any chat using this model. Manual compaction uses its own defaults.</p>
+              </details>
+              <label class="check"><input id="make-default" type="checkbox"> Use as the default connection</label>
+              <div class="form-actions"><button class="primary" id="save-profile" type="submit">Save connection</button><button id="revert-profile" type="button">Revert</button><button id="delete-profile" type="button" class="danger">Delete</button></div>
+            </fieldset>
+          </form>
+          <section class="test-panel" aria-label="Connection tests">
+            <div class="test-actions"><button id="discover">Discover models</button><button id="test-connection">Test connection</button><button id="test-response">Test response</button><button id="cancel-test" hidden>Stop test</button></div>
+            <p id="test-note" class="hint">Save your changes before testing. Test response sends a short greeting; online providers may charge for it. No book content is sent.</p>
+          </section>
+          <div id="status" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="settings.js"></script>
+  <script src="settings-assistants.js"></script>
+  <script src="settings-general.js"></script>
+</body>
+</html>

@@ -1,7 +1,9 @@
 /* ============================= NEO ============================= */
+#detach-outline { float: right; margin: 0 0 16px 12px; padding: 7px 11px; border: 1px solid #777; border-radius: 5px; background: transparent; color: inherit; font-size: 12px; }
 /* Dark surround, white page. The writing is the interface.        */
 
 :root {
+  --window-drag-height: 28px;
   --bg: #191919;
   --bg-soft: #222;
   --paper: #fbfaf7;
@@ -24,6 +26,9 @@ html, body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
+
+.native-titlebar { --window-drag-height: 0px; }
+.native-titlebar #dragstrip { display: none; }
 
 #dragstrip {
   position: fixed; top: 0; left: 0; right: 0; height: 28px;
@@ -66,11 +71,12 @@ button { font: inherit; cursor: pointer; }
   border-bottom: 4px solid #2e2a24; border-radius: 2px; transition: color 0.1s, border-color 0.1s, background 0.1s;
 }
 .pen-slot.over { color: #ddd; border-bottom-color: var(--accent); background: rgba(255,255,255,0.04); }
-#add-shelf-btn {
+.shelf-header-button {
   background: none; border: 1px solid #3a3a3a; color: var(--muted);
   border-radius: 6px; padding: 5px 12px; font-size: 12px;
 }
-#add-shelf-btn:hover { color: var(--accent); border-color: var(--accent); }
+.shelf-header-button:hover { color: var(--accent); border-color: var(--accent); }
+.shelf-header-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .shelf { margin-bottom: 44px; }
 .shelf.dragging { opacity: 0.4; }
@@ -759,11 +765,6 @@ body.bright .spell-menu button { color: #eee; }
 #search-count { font-size: 11px; color: var(--muted); min-width: 52px; text-align: center; }
 
 #goal-counter.goal-met { color: var(--accent); }
-#import-btn {
-  background: none; border: 1px solid #3a3a3a; color: var(--muted);
-  border-radius: 6px; padding: 5px 12px; font-size: 12px;
-}
-#import-btn:hover { color: var(--accent); border-color: var(--accent); }
 
 /* --- Stats / goals modal --- */
 .stats-nums { display: flex; gap: 26px; margin: 14px 0 18px; }
@@ -850,7 +851,7 @@ body.bright .nav-note { color: #999; }
 body.bright .shelf-grip { opacity: 0.55; }
 body.bright .book .b-refresh { color: rgba(255,255,255,0.4); }
 body.bright .new-book { border-color: #6a6a6a; color: #6a6a6a; }
-body.bright #add-shelf-btn, body.bright #import-btn { color: #b4b4b4; border-color: #555; }
+body.bright .shelf-header-button { color: #b4b4b4; border-color: #555; }
 
 /* --- Hint toast --- */
 #hint {

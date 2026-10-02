@@ -1,0 +1,28 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { AssistantPreferences } = require('../assistant-preferences');
+test('assistant instructions have defaults, persist independently, and reject damaged settings', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'neo-assistants-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = () => path.join(dir, 'ai-assistants.json');
+  const prefs = new AssistantPreferences(file);
+  const defaults = prefs.snapshot(); assert.equal(defaults.length, 6);
+  prefs.save({ id: 'characters', instructions: 'Ask about character motivations.' });
+  assert.equal(new AssistantPreferences(file).instructions('characters'), 'Ask about character motivations.');
+  assert.equal(prefs.instructions('plot'), defaults.find(t => t.id === 'plot').instructions);
+  assert.throws(() => prefs.save({ id: 'unknown', instructions: 'test' }), /valid assistant/);
+  assert.throws(() => prefs.save({ id: 'general', instructions: ' '.repeat(10) }), /instructions between/);
+  assert.throws(() => prefs.save({ id: 'general', instructions: 'x'.repeat(12001) }), /instructions between/);
+  const before = fs.readFileSync(file(), 'utf8');
+  const brokenWrite = new AssistantPreferences(file, () => { throw new Error('Disk full'); });
+  assert.throws(() => brokenWrite.save({ id: 'general', instructions: 'New' }), /Disk full/);
+  assert.equal(fs.readFileSync(file(), 'utf8'), before);
+  prefs.save({ id: 'characters', instructions: defaults.find(t => t.id === 'characters').defaultInstructions });
+  assert.equal(prefs.instructions('characters'), defaults.find(t => t.id === 'characters').instructions);
+  fs.writeFileSync(file(), '{bad');
+  assert.throws(() => prefs.save({ id: 'general', instructions: 'New' }), /left unchanged/);
+  assert.equal(fs.readFileSync(file(), 'utf8'), '{bad');
+});
