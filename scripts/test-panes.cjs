@@ -498,7 +498,11 @@ app.whenReady().then(async () => {
     app.exit = (code) => { exitCode = code; };
     await evaluate(pane, `(() => {const field=document.querySelector('textarea[data-key]');field.value='Saved before changing library';field.dispatchEvent(new Event('input'));})()`);
     const fileMenu = Menu.getApplicationMenu().items.find((item) => item.label === 'File');
-    fileMenu.submenu.items.find((item) => item.label === 'Library Folder…').click();
+    fileMenu.submenu.items.find((item) => item.label === 'Library and Backups…').click();
+    let settingsWindow;
+    await until(() => { settingsWindow = BrowserWindow.getAllWindows().find(win => win.webContents.getURL().endsWith('/settings.html')); return settingsWindow; }, 'library settings');
+    await until(() => evaluate(settingsWindow, 'typeof loaded !== "undefined" && loaded && !document.querySelector("#general").hidden'), 'general settings ready');
+    await evaluate(settingsWindow, 'document.querySelector("#browse-library").click()');
     await until(() => exitCode === 0, 'library restart requested');
     assert.equal(meta().chapterNotes['ch-one'], 'Saved before changing library');
     assert.equal(JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')).libraryDir, nextLibrary);

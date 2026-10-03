@@ -6,6 +6,9 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, utilityProcess, scr
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const selectedProfile = require('./fresh-profile').selectProfile(app.getPath('userData'), app.getPath('documents'));
+app.setPath('userData', selectedProfile);
+app.setPath('sessionData', selectedProfile);
 const { relaunchOptions } = require('./relaunch');
 const { prepareLibrary, validateLibraryTarget } = require('./library-location');
 const { installPaneWindows } = require('./pane-windows');
@@ -25,7 +28,8 @@ const backups = require('./backup-controls').backupControls({
 });
 const appSettings = require('./settings-window').installSettingsWindow({
   app, BrowserWindow, ipcMain, dialog, protector, getLibraryPath: () => LIBRARY_DIR,
-  browseLibrary: win => chooseLibraryFolder({ window: win, browse: true }), appearance, backups
+  browseLibrary: win => chooseLibraryFolder({ window: win, browse: true }), appearance, backups,
+  shortcuts: { read: shortcutSnapshot, save: saveShortcut }
 });
 require('./ai-chat-main').installChat({ ipcMain, paneWindows, connections: appSettings.connections, assistants: appSettings.assistants, bookDir });
 const revision = require('./revision-main').installRevision({ ipcMain, paneWindows, connections: appSettings.connections, assistants: appSettings.assistants });
@@ -661,23 +665,16 @@ ipcMain.handle('export:save', async (_e, { format, defaultName, content, zipEntr
 // Writes a timestamped snapshot to the library's Exports folder, then hands it
 // to your email — an outside-the-machine paper trail for provenance.
 ipcMain.handle('email:draft', async (_e, { to, subject, body, html, defaultName, method }) => {
-  const { shell } = require('electron');
+  require('./email-draft').composeUrl(method === 'mail' ? 'default' : method, { to, subject, body });
+  defaultName = path.basename(String(defaultName)).replace(/[<>:\"/\\|?*]/g, '-') || 'Draft';
   const exportsDir = path.join(LIBRARY_DIR, 'Exports');
   if (!fs.existsSync(exportsDir)) fs.mkdirSync(exportsDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const file = path.join(exportsDir, `${defaultName}-${stamp}.pdf`);
   fs.writeFileSync(file, await renderPDF(html));
 
-  if (method === 'gmail') {
-    // Gmail compose in the browser can't take an attachment from outside,
-    // so open the draft pre-filled and reveal the PDF right next to it to drag in.
-    const url = 'https://mail.google.com/mail/?view=cm&fs=1'
-      + '&to=' + encodeURIComponent(to)
-      + '&su=' + encodeURIComponent(subject)
-      + '&body=' + encodeURIComponent(body);
-    await shell.openExternal(url);
-    shell.showItemInFolder(file);
-    return { ok: true, method: 'gmail', file };
+  if (method !== 'mail' || process.platform !== 'darwin') {
+    return require('./email-draft').openCompose(shell, method === 'mail' ? 'default' : method, { to, subject, body }, file);
   }
 
   const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -1160,6 +1157,40 @@ function sendToWindow(msg) {
   if (w) w.webContents.send('menu', msg);
 }
 
+const { menuActionEnabled } = require('./menu-policy');
+let workspaceMenuState = {};
+function workspaceMenuFocused() {
+  const focused = BrowserWindow.getFocusedWindow();
+  return !focused || focused === paneWindows.getOwner();
+}
+function menuCommand(message) {
+  const click = () => {
+    if (!menuActionEnabled(message.type, workspaceMenuState, workspaceMenuFocused())) return;
+    const owner = paneWindows.getOwner();
+    if (['help', 'about', 'checkUpdate'].includes(message.type) && owner) { if (owner.isMinimized()) owner.restore(); owner.show(); owner.focus(); }
+    sendToWindow(message);
+  };
+  click.menuAction = message.type;
+  click.shortcutId = message.type + (message.value !== undefined ? ':' + message.value : '');
+  return click;
+}
+function updateMenuAvailability() {
+  const visit = menu => {
+    for (const item of menu?.items || []) {
+      if (item.id?.startsWith('action:')) item.enabled = menuActionEnabled(item.id.split(':')[1], workspaceMenuState, workspaceMenuFocused());
+      if (item.submenu) { visit(item.submenu); item.enabled = item.submenu.items.some(child => child.type !== 'separator' && child.enabled); }
+    }
+  };
+  visit(Menu.getApplicationMenu());
+}
+ipcMain.on('menu:state', (event, value) => {
+  if (!paneWindows.isOwner(event) || event.senderFrame !== event.sender.mainFrame || !value || typeof value !== 'object') return;
+  workspaceMenuState = Object.fromEntries(['ready', 'book', 'manuscript', 'selection', 'manuscriptSelection', 'spellcheck', 'modal'].map(key => [key, value[key] === true]));
+  updateMenuAvailability();
+});
+app.on('browser-window-focus', updateMenuAvailability);
+app.on('browser-window-blur', () => setTimeout(updateMenuAvailability, 0));
+
 // the Format menu's ticks: whether the caret is in a poetry paragraph, and
 // whether typewriter scrolling is on
 let poetryState = false;
@@ -1185,6 +1216,18 @@ ipcMain.on('style:state', (_e, style) => {
   try { buildMenu(); } catch (err) { logError('menu', err); }
 });
 
+function shortcutSnapshot() { return require('./keyboard-shortcuts').snapshot(readSettings().shortcuts || {}); }
+function saveShortcut({ id, accelerator }) {
+  const settings = readSettings(true);
+  const overrides = { ...(settings.shortcuts || {}) };
+  if (id !== null) { if (accelerator === null) delete overrides[id]; else overrides[id] = accelerator; }
+  settings.shortcuts = require('./keyboard-shortcuts').validate(id === null ? {} : overrides);
+  writeSettings(settings); buildMenu();
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.send('shortcuts:changed', shortcutSnapshot());
+  return shortcutSnapshot();
+}
+ipcMain.handle('shortcuts:read', () => shortcutSnapshot());
+
 function buildMenu() {
   const isMac = process.platform === 'darwin';
   const isWin = process.platform === 'win32';
@@ -1202,60 +1245,60 @@ function buildMenu() {
     ...(isMac ? [{
       role: 'appMenu',
       submenu: [
-        { role: 'about', label: t('About NEO') },
-        { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => appSettings.open() },
+        { role: 'about', label: 'About Neo-AI' },
+        { shortcutId: 'settings', label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => appSettings.open('general') },
         { type: 'separator' },
         { role: 'services', label: t('Services') },
         { type: 'separator' },
-        { role: 'hide', label: t('Hide NEO') },
+        { role: 'hide', label: 'Hide Neo-AI' },
         { role: 'hideOthers', label: t('Hide Others') },
         { role: 'unhide', label: t('Show All') },
         { type: 'separator' },
-        { role: 'quit', label: t('Quit NEO') }
+        { role: 'quit', label: 'Quit Neo-AI' }
       ]
     }] : []),
     {
       label: t('File'),
       submenu: [
-        ...(!isMac ? [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => appSettings.open() }, { type: 'separator' }] : []),
+        ...(!isMac ? [{ shortcutId: 'settings', label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => appSettings.open('general') }, { type: 'separator' }] : []),
         {
           label: t('Export'),
           submenu: [
-            { label: t('Plain Text (.txt)'), click: () => sendToWindow({ type: 'export', format: 'txt' }) },
-            { label: 'Markdown (.md)', click: () => sendToWindow({ type: 'export', format: 'md' }) },
-            { label: t('Web Page (.html)'), click: () => sendToWindow({ type: 'export', format: 'html' }) },
-            { label: 'PDF (.pdf)', click: () => sendToWindow({ type: 'export', format: 'pdf' }) },
-            { label: 'Word (.docx)', click: () => sendToWindow({ type: 'export', format: 'docx' }) },
-            { label: 'EPUB (.epub)', click: () => sendToWindow({ type: 'export', format: 'epub' }) }
+            { label: t('Plain Text (.txt)'), click: menuCommand({ type: 'export', format: 'txt' }) },
+            { label: 'Markdown (.md)', click: menuCommand({ type: 'export', format: 'md' }) },
+            { label: t('Web Page (.html)'), click: menuCommand({ type: 'export', format: 'html' }) },
+            { label: 'PDF (.pdf)', click: menuCommand({ type: 'export', format: 'pdf' }) },
+            { label: 'Word (.docx)', click: menuCommand({ type: 'export', format: 'docx' }) },
+            { label: 'EPUB (.epub)', click: menuCommand({ type: 'export', format: 'epub' }) }
           ]
         },
         { type: 'separator' },
         {
           label: t('Email Draft to Myself'),
           accelerator: 'CmdOrCtrl+E',
-          click: () => sendToWindow({ type: 'emailDraft' })
+          click: menuCommand({ type: 'emailDraft' })
         },
-        { label: t('Email Settings…'), click: () => sendToWindow({ type: 'emailSettings' }) },
-        { label: t('Cover Art…'), click: () => sendToWindow({ type: 'coverArt' }) },
+        { label: t('Email Settings…'), click: menuCommand({ type: 'emailSettings' }) },
+        { label: t('Cover Art…'), click: menuCommand({ type: 'coverArt' }) },
         {
           label: t('Goals…'),
-          click: () => sendToWindow({ type: 'stats' })
+          click: menuCommand({ type: 'stats' })
         },
         {
           label: t('New Books Open To'),
           submenu: [
-            { label: t('Blank Page'), type: 'radio', checked: writingStyle !== 'plotter', click: () => sendToWindow({ type: 'writingStyle', value: 'pantser' }) },
-            { label: t('Outline First'), type: 'radio', checked: writingStyle === 'plotter', click: () => sendToWindow({ type: 'writingStyle', value: 'plotter' }) }
+            { label: t('Blank Page'), type: 'radio', checked: writingStyle !== 'plotter', click: menuCommand({ type: 'writingStyle', value: 'pantser' }) },
+            { label: t('Outline First'), type: 'radio', checked: writingStyle === 'plotter', click: menuCommand({ type: 'writingStyle', value: 'plotter' }) }
           ]
         },
         { type: 'separator' },
         {
           label: t('Import Manuscripts…'),
           accelerator: 'CmdOrCtrl+Shift+I',
-          click: () => sendToWindow({ type: 'import' })
+          click: menuCommand({ type: 'import' })
         },
-        { label: t('Reshelve a Book…'), click: () => sendToWindow({ type: 'reshelve' }) },
-        { label: t('Library Folder…'), click: () => { chooseLibraryFolder().catch((err) => logError('library folder', err)); } },
+        { label: t('Reshelve a Book…'), click: menuCommand({ type: 'reshelve' }) },
+        { label: 'Library and Backups…', click: () => appSettings.open('general') },
         { type: 'separator' },
         ...(isMac ? [{ role: 'close', label: t('Close Window') }] : [{ role: 'quit', label: t('Quit') }])
       ]
@@ -1272,17 +1315,17 @@ function buildMenu() {
         {
           label: isMac ? t('Find & Replace') : t('Find & Replace').replace(/&/g, '&&'),
           accelerator: 'CmdOrCtrl+F',
-          click: () => sendToWindow({ type: 'find' })
+          click: menuCommand({ type: 'find' })
         },
         {
-          label: 'Search book',
+          label: 'Search Book…',
           accelerator: 'CmdOrCtrl+Shift+F',
-          click: () => sendToWindow({ type: 'searchBook' })
+          click: menuCommand({ type: 'searchBook' })
         },
         {
           label: t('Spellcheck Pass'),
           accelerator: 'CmdOrCtrl+;',
-          click: () => sendToWindow({ type: 'spellcheck' })
+          click: menuCommand({ type: 'spellcheck' })
         },
         {
           label: t('Spellcheck Language'),
@@ -1290,7 +1333,7 @@ function buildMenu() {
             label: lang.label,
             type: 'radio',
             checked: spellLanguage === code,
-            click: () => sendToWindow({ type: 'spellLanguage', value: code })
+            click: menuCommand({ type: 'spellLanguage', value: code })
           }))
         }
       ]
@@ -1303,42 +1346,42 @@ function buildMenu() {
           submenu: [
             ...bodyFonts.map((f) => ({
               label: f,
-              click: () => sendToWindow({ type: 'bodyFont', value: f })
+              click: menuCommand({ type: 'bodyFont', value: f })
             })),
             { type: 'separator' },
-            { label: t('Other Font…'), click: () => sendToWindow({ type: 'bodyFontPick' }) }
+            { label: t('Other Font…'), click: menuCommand({ type: 'bodyFontPick' }) }
           ]
         },
         {
           label: t('Drop Cap Style'),
           submenu: [
-            { label: t('Literary'), click: () => sendToWindow({ type: 'dropCap', value: 'literary' }) },
-            { label: t('Fantasy'), click: () => sendToWindow({ type: 'dropCap', value: 'fantasy' }) },
-            { label: t('Sci-Fi'), click: () => sendToWindow({ type: 'dropCap', value: 'scifi' }) },
+            { label: t('Literary'), click: menuCommand({ type: 'dropCap', value: 'literary' }) },
+            { label: t('Fantasy'), click: menuCommand({ type: 'dropCap', value: 'fantasy' }) },
+            { label: t('Sci-Fi'), click: menuCommand({ type: 'dropCap', value: 'scifi' }) },
             { type: 'separator' },
-            { label: t('Off'), click: () => sendToWindow({ type: 'dropCap', value: 'none' }) }
+            { label: t('Off'), click: menuCommand({ type: 'dropCap', value: 'none' }) }
           ]
         },
         {
           label: t('Align Paragraph'),
           submenu: [
-            { label: t('Left'), accelerator: 'CmdOrCtrl+Shift+L', click: () => sendToWindow({ type: 'align', value: 'left' }) },
-            { label: t('Center'), accelerator: 'CmdOrCtrl+Shift+C', click: () => sendToWindow({ type: 'align', value: 'center' }) },
-            { label: t('Right'), accelerator: 'CmdOrCtrl+Shift+R', click: () => sendToWindow({ type: 'align', value: 'right' }) },
-            { label: t('Justify'), accelerator: 'CmdOrCtrl+Shift+J', click: () => sendToWindow({ type: 'align', value: 'justify' }) }
+            { label: t('Left'), accelerator: 'CmdOrCtrl+Shift+L', click: menuCommand({ type: 'align', value: 'left' }) },
+            { label: t('Center'), accelerator: 'CmdOrCtrl+Shift+C', click: menuCommand({ type: 'align', value: 'center' }) },
+            { label: t('Right'), accelerator: 'CmdOrCtrl+Shift+R', click: menuCommand({ type: 'align', value: 'right' }) },
+            { label: t('Justify'), accelerator: 'CmdOrCtrl+Shift+J', click: menuCommand({ type: 'align', value: 'justify' }) }
           ]
         },
         { type: 'separator' },
-        { label: t('Larger Text'), accelerator: 'CmdOrCtrl-Plus', click: () => sendToWindow({ type: 'fontSize', value: 1 }) },
-        { label: t('Smaller Text'), accelerator: 'CmdOrCtrl-Minus', click: () => sendToWindow({ type: 'fontSize', value: -1 }) },
-        { label: t('Reset Text Size'), accelerator: 'CmdOrCtrl+0', click: () => sendToWindow({ type: 'fontSize', value: 0 }) },
+        { label: t('Larger Text'), accelerator: 'CmdOrCtrl-Plus', click: menuCommand({ type: 'fontSize', value: 1 }) },
+        { label: t('Smaller Text'), accelerator: 'CmdOrCtrl-Minus', click: menuCommand({ type: 'fontSize', value: -1 }) },
+        { label: t('Reset Text Size'), accelerator: 'CmdOrCtrl+0', click: menuCommand({ type: 'fontSize', value: 0 }) },
         { type: 'separator' },
         {
           label: t('Typewriter Scrolling'),
           accelerator: 'CmdOrCtrl+Shift+T',
           type: 'checkbox',
           checked: typewriterState,
-          click: () => sendToWindow({ type: 'typewriter' })
+          click: menuCommand({ type: 'typewriter' })
         },
         { type: 'separator' },
         // ticks when the caret sits in a poetry paragraph; ⇧Enter is the
@@ -1347,7 +1390,7 @@ function buildMenu() {
           label: t('Poetry Paragraph') + '\t⇧Enter',
           type: 'checkbox',
           checked: poetryState,
-          click: () => sendToWindow({ type: 'poetry' })
+          click: menuCommand({ type: 'poetry' })
         }
       ]
     },
@@ -1355,16 +1398,10 @@ function buildMenu() {
       label: t('View'),
       submenu: [
         { label: 'Open Outline in Separate Window', accelerator: 'CmdOrCtrl+Shift+U',
-          click: () => sendToWindow({ type: 'detachOutline' }) },
+          click: menuCommand({ type: 'detachOutline' }) },
         { type: 'separator' },
         {
-          label: t('Keyboard Shortcuts…'),
-          accelerator: 'CmdOrCtrl+/',
-          click: () => sendToWindow({ type: 'help' })
-        },
-        { type: 'separator' },
-        {
-          label: t('Full Screen'),
+          shortcutId: 'fullscreen', label: t('Full Screen'),
           accelerator: isMac ? 'Control+Command+F' : 'F11',
           click: () => {
             const w = BrowserWindow.getFocusedWindow();
@@ -1374,24 +1411,24 @@ function buildMenu() {
         {
           label: t('Focus Mode'),
           submenu: [
-            { label: t('Cycle'), accelerator: 'CmdOrCtrl+Shift+O', click: () => sendToWindow({ type: 'focusCycle' }) },
+            { label: t('Cycle'), accelerator: 'CmdOrCtrl+Shift+O', click: menuCommand({ type: 'focusCycle' }) },
             { type: 'separator' },
-            { label: t('Sentence'), click: () => sendToWindow({ type: 'focus', value: 'sentence' }) },
-            { label: t('Paragraph'), click: () => sendToWindow({ type: 'focus', value: 'paragraph' }) },
-            { label: t('Off'), click: () => sendToWindow({ type: 'focus', value: 'off' }) }
+            { label: t('Sentence'), click: menuCommand({ type: 'focus', value: 'sentence' }) },
+            { label: t('Paragraph'), click: menuCommand({ type: 'focus', value: 'paragraph' }) },
+            { label: t('Off'), click: menuCommand({ type: 'focus', value: 'off' }) }
           ]
         },
         { type: 'separator' },
         {
-          label: t('Page'),
+          label: 'Manuscript Page',
           submenu: [
-            { label: t('Night'), click: () => sendToWindow({ type: 'pageTheme', value: 'night' }) },
-            { label: t('Paper'), click: () => sendToWindow({ type: 'pageTheme', value: 'paper' }) }
+            { label: t('Night'), click: menuCommand({ type: 'pageTheme', value: 'night' }) },
+            { label: t('Paper'), click: menuCommand({ type: 'pageTheme', value: 'paper' }) }
           ]
         },
         {
-          label: t('Brighter Interface'),
-          click: () => sendToWindow({ type: 'uiBright' })
+          label: 'Appearance…',
+          click: () => appSettings.open('general')
         },
         { type: 'separator' },
         {
@@ -1410,7 +1447,7 @@ function buildMenu() {
       label: t('Window'),
       submenu: [
         { role: 'minimize', label: t('Minimize') },
-        { role: 'zoom', label: t('Zoom') },
+        { role: 'zoom', label: isMac ? t('Zoom') : 'Maximize / Restore' },
         ...(isMac
           ? [{ type: 'separator' }, { role: 'front', label: t('Bring All to Front') }]
           : [{ role: 'close', label: t('Close') }])
@@ -1420,22 +1457,30 @@ function buildMenu() {
       label: t('Help'),
       submenu: [
         {
-          label: t('NEO Shortcuts'),
-          click: () => sendToWindow({ type: 'help' })
+          label: t('Keyboard Shortcuts…'),
+          accelerator: 'CmdOrCtrl+/',
+          click: menuCommand({ type: 'help' })
         },
         { type: 'separator' },
         {
-          label: t('About NEO'),
-          click: () => sendToWindow({ type: 'about' })
+          label: 'About Neo-AI',
+          click: menuCommand({ type: 'about' })
         },
         {
           label: t('Check for Update…'),
-          click: () => sendToWindow({ type: 'checkUpdate' })
+          click: menuCommand({ type: 'checkUpdate' })
         }
       ]
     }
   ];
+  let commandIndex = 0;
+  const identify = items => { for (const item of items) { if (item.click?.menuAction) item.id = 'action:' + item.click.menuAction + ':' + commandIndex++; if (item.submenu) identify(item.submenu); } };
+  identify(template);
+  const bindings = new Map(shortcutSnapshot().map(row => [row.id, row.accelerator]));
+  const applyShortcuts = items => { for (const item of items) { const id = item.shortcutId || item.click?.shortcutId; if (bindings.has(id)) item.accelerator = bindings.get(id) || undefined; if (item.submenu) applyShortcuts(item.submenu); } };
+  applyShortcuts(template);
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  updateMenuAvailability();
 }
 
 // Manual update check (Help → Check for Update…): a direct GitHub Releases
@@ -1520,7 +1565,7 @@ app.whenReady().then(async () => {
     if (process.platform === 'darwin' && fs.existsSync(devIcon)) {
       if (app.dock) app.dock.setIcon(devIcon);
       app.setAboutPanelOptions({
-        applicationName: 'NEO',
+        applicationName: 'Neo-AI',
         applicationVersion: app.getVersion(),
         iconPath: devIcon
       });
@@ -1559,8 +1604,8 @@ app.whenReady().then(async () => {
     // catastrophic: tell the human instead of dying in silence
     logError('startup', err);
     try {
-      dialog.showErrorBox(t('NEO failed to start'),
-        t('Please report this at github.com/hughhowey/neo/issues:') + '\n\n' + String((err && err.stack) || err));
+      dialog.showErrorBox('Neo-AI failed to start',
+        'Please report this at github.com/raycrews/neo-ai/issues:' + '\n\n' + String((err && err.stack) || err));
     } catch { /* nothing left to try */ }
     app.quit();
     return;

@@ -1,7 +1,7 @@
 {
   "name": "neo-ai",
   "productName": "Neo-AI",
-  "version": "0.9.44",
+  "version": "0.9.46",
   "description": "A word processor for authors. Distraction-free by default.",
   "homepage": "https://github.com/raycrews/neo-ai",
   "main": "main.js",
@@ -22,7 +22,10 @@
     "package:win": "electron-builder --win",
     "package:linux": "electron-builder --linux",
     "package:all": "electron-builder --mac --win --linux",
-    "test:instruction-library": "electron scripts/test-instruction-library.cjs"
+    "test:instruction-library": "electron scripts/test-instruction-library.cjs",
+    "test:menus": "electron scripts/test-menus.cjs",
+    "test:setup-options": "electron scripts/test-setup-options.cjs",
+    "test:clean-start": "electron scripts/test-clean-start.cjs"
   },
   "build": {
     "appId": "io.github.raycrews.neoai",
@@ -98,8 +101,11 @@
     },
     "nsis": {
       "artifactName": "Neo-AI-${version}-${os}-${arch}-Setup.${ext}",
-      "oneClick": true,
-      "deleteAppDataOnUninstall": false
+      "oneClick": false,
+      "deleteAppDataOnUninstall": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "include": "build/installer.nsh"
     },
     "files": [
       "**/*",

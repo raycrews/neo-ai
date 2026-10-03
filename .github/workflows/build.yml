@@ -80,6 +80,15 @@ jobs:
       - name: Test instruction library (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run test:instruction-library
+      - name: Test native menus (Windows and macOS)
+        if: runner.os != 'Linux'
+        run: npm run test:menus
+      - name: Test native menus (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:menus
+      - name: Test email and shortcut settings (Windows)
+        if: runner.os == 'Windows'
+        run: npm run test:setup-options
       - name: Package Windows or Linux
         if: runner.os != 'macOS'
         run: npx electron-builder --${{ matrix.platform }} --publish never
