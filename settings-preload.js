@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   saveAppearance: value => call('settings:appearance', value),
   assistants: () => call('settings:assistants'),
   instructionLibrary: () => call('settings:instructionLibrary'),
+  copyInstruction: text => call('settings:copyInstruction', text),
   saveInstruction: data => call('settings:saveInstruction', data),
   deleteInstruction: id => call('settings:deleteInstruction', id),
   importInstruction: () => call('settings:importInstruction'),

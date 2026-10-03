@@ -67,8 +67,8 @@ app.whenReady().then(async () => {
     assert.equal(command('searchBook').accelerator, 'Command+Shift+F');
     command('searchBook').click();
   } else {
-    owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers: [process.platform === 'darwin' ? 'meta' : 'control', 'shift'] });
-    owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers: [process.platform === 'darwin' ? 'meta' : 'control', 'shift'] });
+    owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers: ['control', 'shift'] });
+    owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers: ['control', 'shift'] });
   }
   await until(() => evaluate(owner, 'document.querySelector("#book-search-dialog").open'), 'search accelerator');
   assert.equal(owner.isFullScreen(), false);

@@ -29,7 +29,8 @@ app.whenReady().then(async () => {
   const activeBefore = await evaluate(win, 'window.settingsAPI.assistants()');
   const untrusted = new BrowserWindow({ show: false, webPreferences: { preload: path.join(__dirname, '../settings-preload.js'), sandbox: true, contextIsolation: true } });
   await untrusted.loadURL('about:blank');
-  assert.equal(await evaluate(untrusted, 'window.settingsAPI.instructionLibrary().then(()=>false,e=>e.message)'), 'Settings request denied.'); untrusted.destroy();
+  assert.equal(await evaluate(untrusted, 'window.settingsAPI.instructionLibrary().then(()=>false,e=>e.message)'), 'Settings request denied.');
+  assert.equal(await evaluate(untrusted, 'window.settingsAPI.copyInstruction("Denied").then(()=>false,e=>e.message)'), 'Settings request denied.'); untrusted.destroy();
   await click('[data-page="ai"]'); await click('[data-ai-view="instruction-library"]');
   const text = 'Preserve the author’s voice.\n\nKeep established facts separate from suggestions.\n';
   await edit('#instruction-name', 'Mystery — Characters'); await edit('#instruction-text', text);
@@ -47,14 +48,10 @@ app.whenReady().then(async () => {
   oldClipboard = clipboard.availableFormats().map(format => [format, clipboard.readBuffer(format)]);
   win.show(); win.focus(); await pause(300); await click('#instruction-copy');
   await until(() => evaluate(win, `document.querySelector('#instruction-status').textContent === 'Instructions copied.'`), 'copy completed');
-  const copied = clipboard.readText().replace(/\r\n/g, '\n');
-  if (copied !== text && process.env.CI) {
-    console.error('Clipboard diagnostic:', JSON.stringify({ formats: clipboard.availableFormats(),
-      unicode: clipboard.readBuffer('CF_UNICODETEXT').toString('hex'), copied }));
-    clipboard.writeText(text);
-    console.error('Native clipboard write/read:', JSON.stringify(clipboard.readText()));
+  assert.equal(clipboard.readText().replace(/\r\n/g, '\n'), text);
+  for (const invalid of [null, 'x'.repeat(200001), 'bad\0text']) {
+    assert.equal(await evaluate(win, `window.settingsAPI.copyInstruction(${JSON.stringify(invalid)}).then(()=>false,e=>e.message)`), 'Instructions must be text, up to 200,000 characters.');
   }
-  assert.equal(copied, text);
   clipboard.clear(); for (const [format, value] of oldClipboard) clipboard.writeBuffer(format, value); oldClipboard = null;
   const exportFile = path.join(scratch, 'export.txt');
   dialog.showSaveDialog = async () => ({ canceled: false, filePath: exportFile });

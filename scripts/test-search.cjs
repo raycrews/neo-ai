@@ -74,14 +74,14 @@ app.whenReady().then(async () => {
   // menus require that OS event; keep accelerator registration and menu-action
   // assertions above, and verify physical Mac shortcuts on a desktop.
   if (process.platform !== 'darwin') {
-    const modifiers = [process.platform === 'darwin' ? 'meta' : 'control', 'shift'];
+    const modifiers = ['control', 'shift'];
     owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers });
     owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers });
     await until(() => evaluate(owner, 'document.querySelector("#book-search-dialog").open'), 'actual search key combination');
     assert.equal(owner.isFullScreen(), false);
     await evaluate(owner, 'document.querySelector("#book-search-close").click()');
-    const fullKey = process.platform === 'darwin' ? 'F' : 'F11';
-    const fullModifiers = process.platform === 'darwin' ? ['control', 'meta'] : [];
+    const fullKey = 'F11';
+    const fullModifiers = [];
     owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: fullKey, modifiers: fullModifiers });
     owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: fullKey, modifiers: fullModifiers });
     await until(() => owner.isFullScreen(), 'fullscreen shortcut');
