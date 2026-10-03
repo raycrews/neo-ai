@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('neoChat', {
 });
 
 contextBridge.exposeInMainWorld('neo', {
+  shortcuts: () => ipcRenderer.invoke('shortcuts:read'),
+  onShortcuts: callback => ipcRenderer.on('shortcuts:changed', (_event, rows) => callback(rows)),
   openSettings: () => ipcRenderer.invoke('settings:open'),
   openPane: (kind) => ipcRenderer.invoke('panes:open', kind),
   flushPanes: () => ipcRenderer.invoke('panes:flush'),
@@ -85,5 +87,6 @@ contextBridge.exposeInMainWorld('neo', {
   reloadForLanguage: () => ipcRenderer.invoke('i18n:reload'),
 
   writingStyleState: (st) => ipcRenderer.send('style:state', st),
+  menuState: value => ipcRenderer.send('menu:state', value),
   onMenu: (cb) => ipcRenderer.on('menu', (_e, msg) => cb(msg))
 });

@@ -61,6 +61,10 @@
     paper.scrollTop = scroll;
     requestAnimationFrame(() => { paper.scrollTop = scroll; });
   }
+  window.neoDocumentFormat = { align(value) {
+    const command = { left: 'justifyLeft', center: 'justifyCenter', right: 'justifyRight', justify: 'justifyFull' }[value];
+    if (command) { remember(); apply(command); }
+  } };
   function select(label, options, onChange) {
     const element = document.createElement('select');
     element.setAttribute('aria-label', label); element.title = label;

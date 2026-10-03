@@ -165,6 +165,9 @@ $('#cancel-test').onclick = () => window.settingsAPI.cancel().catch(error => sta
 for (const b of document.querySelectorAll('[data-page]')) b.onclick = () => {
   for (const other of document.querySelectorAll('[data-page]')) { const active = other === b; if (active) other.setAttribute('aria-current', 'page'); else other.removeAttribute('aria-current'); $('#' + other.dataset.page).hidden = !active; }
 };
+window.settingsAPI.onNavigate(page => {
+  if (['general', 'ai', 'connections'].includes(page)) document.querySelector(`[data-page="${page}"]`).click();
+});
 window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = false; } });
 window.settingsAPI.read().then(result => {
   state = result; loaded = true;

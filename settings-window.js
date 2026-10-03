@@ -5,7 +5,7 @@ const { AssistantPreferences } = require('./assistant-preferences');
 const { InstructionLibrary, readInstructionText, validateEntry } = require('./instruction-library');
 const fs = require('node:fs');
 
-function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector, getLibraryPath, browseLibrary, appearance, backups }) {
+function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector, getLibraryPath, browseLibrary, appearance, backups, shortcuts }) {
   let window = null;
   const jobs = new Map();
   const assistants = new AssistantPreferences(() => path.join(app.getPath('userData'), 'ai-assistants.json'));
@@ -22,7 +22,12 @@ function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector,
       catch (error) { return { error: error.code ? 'Could not save settings. Check disk space and file permissions.' : error.message }; }
     });
   }
+  ipcMain.on('settings:captureShortcut', (event, capture) => {
+    if (trusted(event)) event.sender.setIgnoreMenuShortcuts(capture === true);
+  });
   handle('settings:read', () => ({ ...connections.snapshot(), version: app.getVersion(), libraryPath: getLibraryPath() }));
+  handle('settings:shortcuts', () => shortcuts.read());
+  handle('settings:saveShortcut', (_event, data) => shortcuts.save(data));
   handle('settings:browseLibrary', () => browseLibrary(window));
   handle('settings:backupStatus', () => backups.status());
   handle('settings:backupNow', () => backups.create());
@@ -63,13 +68,15 @@ function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector,
     finally { jobs.delete(event.sender.id); }
   });
   handle('settings:cancel', event => { jobs.get(event.sender.id)?.abort(); return true; });
-  function open() {
-    if (window && !window.isDestroyed()) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); return true; }
+  function open(page) {
+    const navigate = win => { if (['general', 'ai', 'connections'].includes(page)) win.webContents.send('settings:navigate', page); };
+    if (window && !window.isDestroyed()) { if (window.isMinimized()) window.restore(); window.show(); window.focus(); navigate(window); return true; }
     window = new BrowserWindow({ width: 1080, height: 880, minWidth: 800, minHeight: 640,
       title: 'Settings — Neo-AI', backgroundColor: '#191919', show: !process.env.NEO_TEST_HEADLESS,
       webPreferences: { preload: path.join(__dirname, 'settings-preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
     });
     const win = window;
+    win.webContents.once('did-finish-load', () => navigate(win));
     win.setMenu(null);
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', event => event.preventDefault());
