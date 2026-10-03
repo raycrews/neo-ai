@@ -70,25 +70,33 @@ app.whenReady().then(async () => {
   assert.equal(allItems(Menu.getApplicationMenu()).filter(item => item.accelerator === searchAccelerator).length, 1);
   owner.show(); owner.focus(); owner.webContents.focus();
   await until(() => searchMenu.enabled, 'search keyboard shortcut available');
-  const modifiers = [process.platform === 'darwin' ? 'meta' : 'control', 'shift'];
-  owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers });
-  owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers });
-  await until(() => evaluate(owner, 'document.querySelector("#book-search-dialog").open'), 'actual search key combination');
-  assert.equal(owner.isFullScreen(), false);
-  await evaluate(owner, 'document.querySelector("#book-search-close").click()');
-  const fullKey = process.platform === 'darwin' ? 'F' : 'F11';
-  const fullModifiers = process.platform === 'darwin' ? ['control', 'meta'] : [];
-  owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: fullKey, modifiers: fullModifiers });
-  owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: fullKey, modifiers: fullModifiers });
-  await until(() => owner.isFullScreen(), 'fullscreen shortcut');
-  owner.setFullScreen(false); await until(() => !owner.isFullScreen(), 'exit fullscreen'); owner.hide();
+  // sendInputEvent creates a Chromium event without an NSEvent. macOS native
+  // menus require that OS event; keep accelerator registration and menu-action
+  // assertions above, and verify physical Mac shortcuts on a desktop.
+  if (process.platform !== 'darwin') {
+    const modifiers = [process.platform === 'darwin' ? 'meta' : 'control', 'shift'];
+    owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers });
+    owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers });
+    await until(() => evaluate(owner, 'document.querySelector("#book-search-dialog").open'), 'actual search key combination');
+    assert.equal(owner.isFullScreen(), false);
+    await evaluate(owner, 'document.querySelector("#book-search-close").click()');
+    const fullKey = process.platform === 'darwin' ? 'F' : 'F11';
+    const fullModifiers = process.platform === 'darwin' ? ['control', 'meta'] : [];
+    owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: fullKey, modifiers: fullModifiers });
+    owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: fullKey, modifiers: fullModifiers });
+    await until(() => owner.isFullScreen(), 'fullscreen shortcut');
+    owner.setFullScreen(false); await until(() => !owner.isFullScreen(), 'exit fullscreen');
+  } else {
+    console.log('MANUAL CHECK: macOS physical search/fullscreen shortcuts (synthetic events bypass NSMenu).');
+  }
+  owner.hide();
   await evaluate(owner, 'openBook("book-two")');
   await query('journal'); assert.equal(await count(), 0);
   assert.equal(await evaluate(owner, 'document.querySelector("#book-search-description").textContent'), 'Other book');
   await evaluate(owner, 'document.querySelector("#book-search-query").value="";document.querySelector("#book-search-section").dispatchEvent(new Event("change"))');
   assert.equal(await count(), 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: live edits, literal search, all sections, safe previews, manuscript/reference/chat navigation, detached chat, draft preservation, real keyboard search/fullscreen shortcuts and book isolation.');
+  console.log('PASS: live edits, literal search, all sections, safe previews, manuscript/reference/chat navigation, detached chat, draft preservation, search/fullscreen shortcuts on Windows/Linux and book isolation.');
   console.log('Screenshots: '+scratch); app.exit(0);
 }).catch(error => { console.error(error); console.error(errors); app.exit(1); });
 setTimeout(() => { console.error('Search test timed out'); app.exit(1); }, 90000).unref();

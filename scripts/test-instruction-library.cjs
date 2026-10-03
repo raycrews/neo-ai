@@ -47,7 +47,14 @@ app.whenReady().then(async () => {
   oldClipboard = clipboard.availableFormats().map(format => [format, clipboard.readBuffer(format)]);
   win.show(); win.focus(); await pause(300); await click('#instruction-copy');
   await until(() => evaluate(win, `document.querySelector('#instruction-status').textContent === 'Instructions copied.'`), 'copy completed');
-  assert.equal(clipboard.readText().replace(/\r\n/g, '\n'), text);
+  const copied = clipboard.readText().replace(/\r\n/g, '\n');
+  if (copied !== text && process.env.CI) {
+    console.error('Clipboard diagnostic:', JSON.stringify({ formats: clipboard.availableFormats(),
+      unicode: clipboard.readBuffer('CF_UNICODETEXT').toString('hex'), copied }));
+    clipboard.writeText(text);
+    console.error('Native clipboard write/read:', JSON.stringify(clipboard.readText()));
+  }
+  assert.equal(copied, text);
   clipboard.clear(); for (const [format, value] of oldClipboard) clipboard.writeBuffer(format, value); oldClipboard = null;
   const exportFile = path.join(scratch, 'export.txt');
   dialog.showSaveDialog = async () => ({ canceled: false, filePath: exportFile });

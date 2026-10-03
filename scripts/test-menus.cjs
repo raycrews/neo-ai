@@ -62,8 +62,14 @@ app.whenReady().then(async () => {
   await until(() => !command('align').enabled && !command('searchBook').enabled, 'pane guard');
   owner.show(); owner.focus(); await until(() => command('searchBook').enabled, 'owner focus');
   owner.webContents.focus();
-  owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers: [process.platform === 'darwin' ? 'meta' : 'control', 'shift'] });
-  owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers: [process.platform === 'darwin' ? 'meta' : 'control', 'shift'] });
+  if (process.platform === 'darwin') {
+    // NSMenu needs a native NSEvent, which sendInputEvent does not create.
+    assert.equal(command('searchBook').accelerator, 'Command+Shift+F');
+    command('searchBook').click();
+  } else {
+    owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers: [process.platform === 'darwin' ? 'meta' : 'control', 'shift'] });
+    owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers: [process.platform === 'darwin' ? 'meta' : 'control', 'shift'] });
+  }
   await until(() => evaluate(owner, 'document.querySelector("#book-search-dialog").open'), 'search accelerator');
   assert.equal(owner.isFullScreen(), false);
   await evaluate(owner, 'document.querySelector("#book-search-close").click()');
