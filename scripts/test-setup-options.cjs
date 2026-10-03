@@ -8,7 +8,6 @@ fs.writeFileSync(path.join(libraryDir, 'library.json'), JSON.stringify({ firstRu
 fs.writeFileSync(path.join(libraryDir, 'book-one', 'book.json'), JSON.stringify({ id: 'book-one', title: 'Menu fixture', chapterOrder: ['ch-one'], workspaceTree: { characters: [{ id: 'character', type: 'document', title: 'Detective', text: '<p>A patient detective.</p>' }] } }));
 fs.writeFileSync(path.join(libraryDir, 'book-one', 'chapters', 'ch-one.html'), '<p>The detective arrived.</p>');
 app.setPath('userData', device); process.env.NEO_TEST_HEADLESS = '1';
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 require(process.env.NEO_MENUS_PACKAGED ? '../dist/win-unpacked/resources/app.asar/main.js' : '../main');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const evaluate = (win, code) => win.webContents.executeJavaScript(code, true);

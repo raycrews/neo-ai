@@ -509,6 +509,8 @@ folder and send it yourself. Neo-AI does not send email automatically.
 and restores defaults. Standard text editing keys and writing gestures stay fixed.
 The Help shortcut reference reflects custom menu bindings.
 
+Linux AppImage build and testing instructions: [Linux testing guide](docs/LINUX.md).
+
 The app is very simple: an Electron shell (`main.js`), a preload bridge (`preload.js`), and a renderer (`app.js` + `styles.css` + `index.html`). If you know JavaScript, you can change NEO. Have at it.
 
 ## Roadmap (things I'm dreaming up but may never get to):

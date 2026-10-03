@@ -15,7 +15,6 @@ fs.writeFileSync(path.join(libraryDir, 'book-one', 'chapters', 'ch-two.html'), '
 fs.writeFileSync(path.join(libraryDir, 'book-one', 'ai-chats.json'), JSON.stringify({version:1,selectedId:'chat-one',conversations:[{id:'chat-one',title:'Excluded chat',profileId:'local',model:'fixture-model',draft:'Draft text.',contextIds:[],messages:[{id:'prompt-one',role:'user',content:'A question.',status:'complete'},{id:'reply-one',role:'assistant',content:'An answer.',status:'complete'}]}]}));
 fs.writeFileSync(path.join(libraryDir, 'library.json'), JSON.stringify({ firstRunDone: true, authorName: 'Fixture', hintShown: true, coverArt: { auto: false }, shelves: [{ id: 'shelf', name: 'Shelf', bookIds: ['book-one'] }] }));
 app.setPath('userData', device); process.env.NEO_TEST_HEADLESS = '1';
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 let shown, reply = 'the weathered gate', mode = 'normal'; const requests = [], errors = [];
 Menu.prototype.popup = function(options) { shown = { menu: this, options }; };
 const server = http.createServer(async (req, res) => {
