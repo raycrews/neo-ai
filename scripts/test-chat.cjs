@@ -18,7 +18,6 @@ fs.writeFileSync(path.join(device, 'ai-assistants.json'), JSON.stringify({ versi
 fs.writeFileSync(path.join(libraryDir, 'book-two', 'ai-chats.json'), JSON.stringify({version:1,selectedId:'legacy-chat',conversations:[{id:'legacy-chat',title:'Previously saved chat',profileId:'local',model:'fixture-model',draft:'',messages:[],summary:null,preview:null}]}));
 fs.writeFileSync(path.join(libraryDir, 'library.json'), JSON.stringify({ firstRunDone: true, authorName: 'Fixture', hintShown: true, coverArt: { auto: false }, shelves: [{ id: 'shelf-one', name: 'Shelf', bookIds: ['book-one', 'book-two'] }] }));
 app.setPath('userData', device); process.env.NEO_TEST_HEADLESS = '1';
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 const requests = []; let slow = false, bad = false, formattedReply = false;
 const markdownReply = '### Established Facts\n\n**Sarah** has an *uncertain* past.\n\n1. **Motivation**\n   - A nested detail\n2. A second option\n\n> A quoted idea\n\n---\n\n`literal code`\n\n<script>globalThis.markdownExecuted=true</script>\n\n![Image](https://example.com/tracker.png)';
 const server = http.createServer(async (req, res) => {

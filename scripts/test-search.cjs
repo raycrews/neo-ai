@@ -62,11 +62,12 @@ app.whenReady().then(async () => {
   owner.show(); owner.focus(); owner.webContents.focus();
   const searchMenu = Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items || []).find(item => item.label === 'Search Book…');
   await until(() => searchMenu.enabled, 'search menu available in focused workspace');
-  assert.equal(searchMenu.accelerator, 'CmdOrCtrl+Shift+F'); searchMenu.click();
+  const searchAccelerator = process.platform === 'darwin' ? 'Command+Shift+F' : 'Control+Shift+F';
+  assert.equal(searchMenu.accelerator, searchAccelerator); searchMenu.click();
   await until(() => evaluate(owner, 'document.querySelector("#book-search-dialog").open'), 'search shortcut menu');
   await evaluate(owner, 'document.querySelector("#book-search-close").click()');
   const allItems = menu => menu.items.flatMap(item => [item, ...(item.submenu ? allItems(item.submenu) : [])]);
-  assert.equal(allItems(Menu.getApplicationMenu()).filter(item => item.accelerator === 'CmdOrCtrl+Shift+F').length, 1);
+  assert.equal(allItems(Menu.getApplicationMenu()).filter(item => item.accelerator === searchAccelerator).length, 1);
   owner.show(); owner.focus(); owner.webContents.focus();
   await until(() => searchMenu.enabled, 'search keyboard shortcut available');
   const modifiers = [process.platform === 'darwin' ? 'meta' : 'control', 'shift'];

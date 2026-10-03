@@ -13,7 +13,6 @@ fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ libraryD
 fs.writeFileSync(path.join(libraryDir, 'library.json'), JSON.stringify({ firstRunDone: true, authorName: 'Test', shelves: [], coverArt: { auto: false } }));
 app.setPath('userData', userData);
 process.env.NEO_TEST_HEADLESS = '1';
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 const requests = []; let mode = 'normal';
 const server = http.createServer(async (req, res) => {
   let body = ''; for await (const chunk of req) body += chunk;

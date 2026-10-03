@@ -26,8 +26,6 @@ fs.writeFileSync(path.join(bookDir, 'chapters', 'ch-one.html'), '<p>First chapte
 fs.writeFileSync(path.join(bookDir, 'chapters', 'ch-two.html'), '<p>Second chapter prose remains intact.</p>');
 app.setPath('userData', userData);
 process.env.NEO_TEST_HEADLESS = '1';
-// Headless Linux CI does not provide a setuid Chromium sandbox.
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 const rendererErrors = [];
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (event) => {

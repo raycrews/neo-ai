@@ -10,7 +10,6 @@ if (process.env.NEO_TEST_FRESH) {
 }
 app.setPath('userData', device); app.setPath('documents', documents);
 process.env.NEO_TEST_HEADLESS = '1';
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 require('../dist/win-unpacked/resources/app.asar/main.js');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const evaluate = (win, code) => win.webContents.executeJavaScript(code, true);

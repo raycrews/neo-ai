@@ -88,7 +88,8 @@ test('controls flush before snapshot, serialize jobs, cancel safely and preserve
   const originalSelected = selected;
   const restoredControls = backupControls({ getLibraryPath: () => library, flush: async () => {}, shell: {}, openLibrary: async p => { opened = p; },
     dialog: { showOpenDialog: async (_win, options) => ({ filePaths: [options.properties.includes('openFile') ? originalSelected : root] }), showMessageBox: async () => ({ response: 1 }) } });
-  const result = await restoredControls.restore({}); assert.ok(result.restored.startsWith(root));
+  const result = await restoredControls.restore({});
+  assert.equal(path.dirname(fs.realpathSync(result.restored)), fs.realpathSync(root));
   assert.equal(opened, undefined); await restoredControls.openRestored(); assert.equal(opened, result.restored);
   assert.equal(fs.existsSync(path.join(library, 'library.json')), true);
 });

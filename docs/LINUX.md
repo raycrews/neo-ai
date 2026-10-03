@@ -45,7 +45,8 @@ Neo-AI reports session-only storage rather than saving keys as plain text.
 
 ## Desktop acceptance checks
 
-Test on a normal Linux desktop as well as the automated virtual display:
+The first manual test target is Pop!_OS on Intel x86-64. Test on the normal
+desktop as well as the automated virtual display:
 
 - First run, quit/reopen, themes, and keyboard shortcut customization.
 - Create and edit a book; confirm formatting and content after reopening.

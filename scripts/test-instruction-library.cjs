@@ -10,7 +10,6 @@ fs.mkdirSync(device); fs.mkdirSync(libraryDir);
 fs.writeFileSync(path.join(device, 'settings.json'), JSON.stringify({ libraryDir }));
 fs.writeFileSync(path.join(libraryDir, 'library.json'), JSON.stringify({ firstRunDone: true, authorName: 'Test', shelves: [], coverArt: { auto: false } }));
 app.setPath('userData', device); process.env.NEO_TEST_HEADLESS = '1';
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 require(process.env.NEO_INSTRUCTIONS_PACKAGED ? '../dist/win-unpacked/resources/app.asar/main.js' : '../main');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const evaluate = (win, code) => win.webContents.executeJavaScript(code, true);
