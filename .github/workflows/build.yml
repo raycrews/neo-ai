@@ -144,6 +144,8 @@ jobs:
           flatpak install --user --noninteractive -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08 org.electronjs.Electron2.BaseApp//25.08
       - run: npm ci
       - run: npm run package:flatpak
+        env:
+          DEBUG: '@malept/flatpak-bundler'
       - name: Install and test packaged Flatpak
         run: |
           flatpak install --user --noninteractive -y --bundle dist/*.flatpak
