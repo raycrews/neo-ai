@@ -126,7 +126,8 @@ jobs:
 
   flatpak:
     name: Build and test (Flatpak x64)
-    runs-on: ubuntu-22.04
+    # 1.4+ uses appstreamcli, which the current Freedesktop SDK provides.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

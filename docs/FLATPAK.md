@@ -64,7 +64,8 @@ io.github.raycrews.neoai --ozone-platform=wayland`.
 
 ## Build and verify
 
-Use Linux, Node.js 24, `flatpak`, and `flatpak-builder`. Add Flathub as above, then:
+Use Linux, Node.js 24, `flatpak`, and `flatpak-builder` 1.4 or newer (for example,
+Ubuntu 24.04). Add Flathub as above, then:
 
 ```bash
 flatpak install --user flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08 org.electronjs.Electron2.BaseApp//25.08

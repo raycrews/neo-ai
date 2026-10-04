@@ -12,7 +12,7 @@ const appId = 'io.github.raycrews.neoai';
 const label = flatpak ? 'Flatpak' : 'AppImage';
 const image = path.resolve(process.argv[2] || `dist/Neo-AI-${version}-linux-x86_64.AppImage`);
 if (process.platform !== 'linux') throw new Error('Run this test on Linux.');
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'neo-packaged-linux-'));
+const scratch = fs.mkdtempSync(path.join(flatpak ? os.homedir() : os.tmpdir(), 'neo-packaged-linux-'));
 const home = path.join(scratch, 'home'), config = path.join(home, '.config');
 const documents = path.join(home, 'Documents');
 for (const dir of [home, config, documents]) fs.mkdirSync(dir, { recursive: true });
@@ -78,7 +78,7 @@ const provider = http.createServer(async (req, res) => {
 async function launch() {
   log = ''; let endpoint;
   const flags = ['--remote-debugging-port=0', '--ozone-platform=x11', '--disable-dev-shm-usage'];
-  if (flatpak) flags.push('--inspect=0'); // Test-only access to stub the native picker.
+  if (flatpak) flags.push('--inspect=0', '--user-data-dir=' + path.join(config, 'Neo-AI'));
   const isolated = { HOME: home, XDG_CONFIG_HOME: config,
     XDG_DATA_HOME: path.join(home, '.local/share'), XDG_CACHE_HOME: path.join(home, '.cache') };
   // Flatpak itself uses the build user's installation; only the application gets
@@ -156,10 +156,20 @@ async function close() {
     main.close();
     await evaluate(page, 'window.neo.openSettings()');
     const switching = await target('settings.html');
+    // Zypak may restart via the host portal without inheriting stdout or XDG
+    // overrides. An explicit test profile survives in argv; Chromium records
+    // the new debugging endpoint there. The directory is under home so it is
+    // also accessible using only the installed package's permissions.
+    const activePort = path.join(config, 'Neo-AI', 'DevToolsActivePort');
+    fs.rmSync(activePort, { force: true });
     log = '';
     await evaluate(switching, 'void window.settingsAPI.browseLibrary()');
     switching.close(); page.close(); browser.close();
-    const restarted = await until(() => log.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:\d+\/devtools\/browser\/[^\s]+)/)?.[1], 'automatic Flatpak restart');
+    const restarted = await until(() => {
+      if (!fs.existsSync(activePort)) return null;
+      const [port, endpoint] = fs.readFileSync(activePort, 'utf8').trim().split('\n');
+      return port && endpoint ? `ws://127.0.0.1:${port}${endpoint}` : null;
+    }, 'automatic Flatpak restart');
     target = await attach(restarted);
     assert.equal(await evaluate(page, 'window.neo.libraryPath()'), nextLibrary);
     assert.ok(fs.existsSync(path.join(libraryDir, id, 'chapters/chapter-test.html')), 'original writing remains');
