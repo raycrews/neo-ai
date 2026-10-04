@@ -2,6 +2,14 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { relaunchOptions } = require('../relaunch');
 
+test('Flatpak restarts through Zypak, even with inherited AppImage variables', () => {
+  assert.deepEqual(relaunchOptions({ platform: 'linux',
+    env: { FLATPAK_ID: 'io.github.raycrews.neoai', APPIMAGE: '/irrelevant.AppImage' },
+    argv: ['/app/lib/io.github.raycrews.neoai/neo-ai', '--lang=en-US'] }), {
+    execPath: '/app/bin/electron-wrapper', args: ['--lang=en-US']
+  });
+});
+
 test('portable Windows restarts the launcher rather than the extracted app', () => {
   const argv = ['C:\\Temp\\ns123\\app\\Neo-AI.exe', '--lang=en-US'];
   assert.deepEqual(relaunchOptions({ platform: 'win32',

@@ -1,7 +1,7 @@
 {
   "name": "neo-ai",
   "productName": "Neo-AI",
-  "version": "0.9.47",
+  "version": "0.9.48",
   "description": "A word processor for authors. Distraction-free by default.",
   "homepage": "https://github.com/raycrews/neo-ai",
   "main": "main.js",
@@ -27,7 +27,9 @@
     "test:setup-options": "electron scripts/test-setup-options.cjs",
     "test:clean-start": "electron scripts/test-clean-start.cjs",
     "package:appimage": "electron-builder --linux AppImage --x64 --publish never",
-    "test:appimage": "node scripts/test-appimage.cjs"
+    "test:appimage": "node scripts/test-packaged-linux.cjs",
+    "package:flatpak": "electron-builder --linux flatpak --x64 --publish never",
+    "test:flatpak": "node scripts/test-packaged-linux.cjs --flatpak"
   },
   "build": {
     "appId": "io.github.raycrews.neoai",
@@ -98,7 +100,7 @@
       },
       "maintainer": "raycrews",
       "executableName": "neo-ai",
-      "icon": "build/icon.png",
+      "icon": "build/icons",
       "syncDesktopName": true
     },
     "portable": {
@@ -124,7 +126,34 @@
       "!locales/_template.json",
       "!tools/**",
       "!docs/**"
-    ]
+    ],
+    "flatpak": {
+      "runtime": "org.freedesktop.Platform",
+      "runtimeVersion": "25.08",
+      "sdk": "org.freedesktop.Sdk",
+      "base": "org.electronjs.Electron2.BaseApp",
+      "baseVersion": "25.08",
+      "branch": "stable",
+      "finishArgs": [
+        "--share=ipc",
+        "--socket=x11",
+        "--device=dri",
+        "--share=network",
+        "--filesystem=home",
+        "--filesystem=/mnt",
+        "--filesystem=/media",
+        "--filesystem=/run/media",
+        "--filesystem=xdg-run/gvfs",
+        "--talk-name=org.freedesktop.secrets",
+        "--env=ELECTRON_TRASH=gio"
+      ],
+      "files": [
+        [
+          "build/io.github.raycrews.neoai.metainfo.xml",
+          "/share/metainfo/io.github.raycrews.neoai.metainfo.xml"
+        ]
+      ]
+    }
   },
   "author": "Hugh Howey",
   "license": "MIT",

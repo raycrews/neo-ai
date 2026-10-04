@@ -1,6 +1,11 @@
 // A portable Windows app runs inside a temporary extraction directory.
 // Its launcher deletes that directory on exit, so relaunch the durable EXE.
 function relaunchOptions({ platform = process.platform, env = process.env, argv = process.argv } = {}) {
+  // Re-enter the packaged Zypak wrapper so the new Electron process retains
+  // Flatpak's Chromium sandbox integration when changing libraries.
+  if (platform === 'linux' && env.FLATPAK_ID === 'io.github.raycrews.neoai') {
+    return { execPath: '/app/bin/electron-wrapper', args: argv.slice(1) };
+  }
   if (platform === 'win32' && env.PORTABLE_EXECUTABLE_FILE) {
     return { execPath: env.PORTABLE_EXECUTABLE_FILE, args: argv.slice(1) };
   }
