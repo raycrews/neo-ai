@@ -11,20 +11,18 @@ test('Flatpak launcher selects actual display sockets before starting Electron',
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'neo-display-'));
   const socket = path.join(scratch, 'wayland-0');
   const server = net.createServer();
-  fs.writeFileSync(path.join(scratch, 'zypak-wrapper'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
-  const run = (env = {}, args = []) => execFileSync('/bin/sh', [path.resolve(__dirname, '../build/flatpak-launcher.sh'), ...args], {
+  const run = (env = {}) => execFileSync('/bin/sh', [path.resolve(__dirname, '../build/flatpak-display.sh')], {
     encoding: 'utf8', env: { PATH: scratch, FLATPAK_ID: 'test.neo', XDG_RUNTIME_DIR: scratch, XDG_SESSION_TYPE: 'wayland', ...env }
-  }).trim().split('\n');
+  }).trim();
   try {
-    assert.deepEqual(run(), ['neo-ai', '--ozone-platform=x11']);
+    assert.equal(run(), 'x11');
     fs.writeFileSync(socket, 'not a socket');
-    assert.equal(run()[1], '--ozone-platform=x11');
+    assert.equal(run(), 'x11');
     fs.unlinkSync(socket);
     server.listen(socket); await once(server, 'listening');
-    assert.equal(run()[1], '--ozone-platform=wayland');
-    assert.equal(run({ WAYLAND_DISPLAY: socket })[1], '--ozone-platform=wayland');
-    assert.equal(run({ WAYLAND_DISPLAY: 'missing' })[1], '--ozone-platform=x11');
-    assert.deepEqual(run({}, ['--ozone-platform=x11', 'file with spaces']), ['neo-ai', '--ozone-platform=wayland', '--ozone-platform=x11', 'file with spaces']);
+    assert.equal(run(), 'wayland');
+    assert.equal(run({ WAYLAND_DISPLAY: socket }), 'wayland');
+    assert.equal(run({ WAYLAND_DISPLAY: 'missing' }), 'x11');
   } finally {
     if (server.listening) await new Promise(resolve => server.close(resolve));
     fs.rmSync(scratch, { recursive: true, force: true });

@@ -47,8 +47,10 @@ async function connect(url) {
     pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
   }) };
 }
-async function evaluate(client, expression) {
-  const result = await client.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+async function evaluate(client, expression, awaitPromise = true) {
+  let result;
+  try { result = await client.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: true }); }
+  catch (error) { throw new Error(expression.slice(0, 160) + ': ' + error.message, { cause: error }); }
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
   return result.result.value;
 }
@@ -107,9 +109,10 @@ async function launch() {
     const mainEndpoint = log.match(/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/)?.[1];
     assert.ok(mainEndpoint, 'test main-process inspector');
     const main = await connect(mainEndpoint);
-    assert.equal(await evaluate(main, "process.mainModule.require('electron').app.commandLine.getSwitchValue('ozone-platform')"), nativeWayland ? 'wayland' : 'x11');
-    if (nativeWayland) assert.equal(await evaluate(main, '!!process.env.DISPLAY'), false, 'native Wayland test has no X11 display');
-    main.close();
+    try {
+      assert.equal(await evaluate(main, "process.mainModule.require('electron').app.commandLine.getSwitchValue('ozone-platform')", false), nativeWayland ? 'wayland' : 'x11');
+      if (nativeWayland) assert.equal(await evaluate(main, '!!process.env.DISPLAY', false), false, 'native Wayland test has no X11 display');
+    } finally { main.close(); }
     console.log('PASS: packaged display selection: ' + (nativeWayland ? 'native Wayland without X11' : x11Session ? 'X11 session' : 'X11 fallback with stale Wayland session variables'));
   }
   return attach(endpoint);
@@ -168,7 +171,7 @@ async function close() {
     const mainEndpoint = log.match(/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/)?.[1];
     assert.ok(mainEndpoint, 'test main-process inspector');
     const main = await connect(mainEndpoint);
-    await evaluate(main, `process.mainModule.require('electron').dialog.showOpenDialog = async () => ({canceled:false,filePaths:[${JSON.stringify(nextLibrary)}]}); undefined`);
+    await evaluate(main, `process.mainModule.require('electron').dialog.showOpenDialog = async () => ({canceled:false,filePaths:[${JSON.stringify(nextLibrary)}]}); undefined`, false);
     main.close();
     await evaluate(page, 'window.neo.openSettings()');
     const switching = await target('settings.html');

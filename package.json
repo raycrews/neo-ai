@@ -150,13 +150,16 @@
       ],
       "files": [
         [
-          "build/flatpak-launcher.sh",
-          "/bin/electron-wrapper"
+          "build/flatpak-display.sh",
+          "/bin/neo-display-backend"
         ],
         [
           "build/io.github.raycrews.neoai.metainfo.xml",
           "/share/metainfo/io.github.raycrews.neoai.metainfo.xml"
         ]
+      ],
+      "executableArgs": [
+        "--ozone-platform=\"$(sh /app/bin/neo-display-backend)\""
       ]
     }
   },
