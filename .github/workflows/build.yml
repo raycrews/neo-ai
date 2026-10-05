@@ -140,7 +140,7 @@ jobs:
       - name: Install Flatpak tools and runtimes
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder xvfb xauth dbus-x11
+          sudo apt-get install -y flatpak flatpak-builder xvfb xauth dbus-x11 weston
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08 org.electronjs.Electron2.BaseApp//25.08
       - run: npm ci
@@ -150,7 +150,7 @@ jobs:
       - name: Install and test packaged Flatpak
         run: |
           flatpak install --user --noninteractive -y --bundle dist/*.flatpak
-          dbus-run-session -- xvfb-run -a npm run test:flatpak
+          bash scripts/test-flatpak-displays.sh
       - name: Checksum Flatpak
         working-directory: dist
         run: sha256sum *.flatpak > SHA256SUMS-flatpak-x64.txt

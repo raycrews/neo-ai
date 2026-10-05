@@ -13,17 +13,18 @@ Desktop** GitHub Actions workflow. In that folder, run:
 sha256sum -c SHA256SUMS-flatpak-x64.txt
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install --user flathub org.freedesktop.Platform//25.08
-flatpak install --user ./Neo-AI-0.9.49-linux-x86_64.flatpak
+flatpak install --user ./Neo-AI-0.9.50-linux-x86_64.flatpak
 flatpak run io.github.raycrews.neoai
 ```
 
 Neo-AI also appears in the desktop application menu. The first runtime download
 can be large; it is shared with other Flatpak applications.
 
-The launcher explicitly selects X11/Xwayland, matching the package's display
-permission even when the desktop session uses Wayland. Version 0.9.48 omitted
-this flag and could fail at startup on Wayland desktops. To open that older
-version temporarily, use `flatpak run io.github.raycrews.neoai --ozone-platform=x11`.
+Neo-AI uses native Wayland when its display socket is available inside the
+sandbox, and X11 otherwise. Both desktop session types are supported without
+extra launch flags. Version 0.9.48 could select Wayland without permission to
+access its socket; its temporary workaround is
+`flatpak run io.github.raycrews.neoai --ozone-platform=x11`.
 
 Install a later Neo-AI bundle with the same `flatpak install --user ./…flatpak`
 command. Preferences are retained. `flatpak update` updates the shared runtime,
@@ -48,7 +49,8 @@ have the same display name.
 
 ## Sandbox permissions
 
-- X11/Xwayland, shared memory, and graphics acceleration display the editor.
+- Wayland and fallback X11, shared memory, and graphics acceleration display the
+  editor. Flatpak exposes X11 when a Wayland display is unavailable.
 - Network access allows local, LAN, Tailscale, and online AI connections.
 - Home-folder access supports the default Documents library, imports, and
   exports. `/mnt`, `/media`, `/run/media`, and the desktop's GVfs mount directory
@@ -63,26 +65,35 @@ access. For a library mounted elsewhere, grant that specific mount, then reopen:
 flatpak override --user --filesystem=/your/library/mount io.github.raycrews.neoai
 ```
 
-Do not grant a literal Windows path or an `smb://` URL. On desktops with native
-Wayland support, you can also test `flatpak run --socket=wayland
-io.github.raycrews.neoai --ozone-platform=wayland`.
+Do not grant a literal Windows path or an `smb://` URL. To troubleshoot a graphics
+driver issue on a Wayland desktop, temporarily use Xwayland:
+
+```bash
+flatpak run --nosocket=wayland --socket=x11 io.github.raycrews.neoai --ozone-platform=x11
+```
+
+The optional system-bus and VSync diagnostics printed by Electron do not by
+themselves mean startup or saving failed. Report visible rendering problems,
+crashes, or a feature that fails along with its terminal output.
 
 ## Build and verify
 
 Use Linux, Node.js 24, `flatpak`, and `flatpak-builder` 1.4 or newer (for example,
-Ubuntu 24.04). Add Flathub as above, then:
+Ubuntu 24.04). The display tests also require Weston, Xvfb and D-Bus. Add
+Flathub as above, then:
 
 ```bash
 flatpak install --user flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08 org.electronjs.Electron2.BaseApp//25.08
 npm ci
 npm run package:flatpak
-flatpak install --user ./dist/Neo-AI-0.9.49-linux-x86_64.flatpak
-dbus-run-session -- xvfb-run -a npm run test:flatpak
+flatpak install --user ./dist/Neo-AI-0.9.50-linux-x86_64.flatpak
+bash scripts/test-flatpak-displays.sh
 ```
 
-The packaged test uses temporary settings and writing. It advertises a Wayland
-session without a Wayland socket and leaves display selection to the installed
-launcher, catching the 0.9.48 startup regression. It checks first launch,
+The packaged tests use temporary settings and writing. They run on X11, native
+Wayland without X11, and X11 with stale Wayland session variables. Display
+selection is left to the installed application, catching the 0.9.48 startup
+regression. They check first launch,
 formatted content, backups, appearance, shortcuts, and persistence. Zypak provides
 Electron sandbox integration; no `--no-sandbox` workaround is used.
 

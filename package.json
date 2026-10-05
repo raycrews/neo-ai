@@ -1,7 +1,7 @@
 {
   "name": "neo-ai",
   "productName": "Neo-AI",
-  "version": "0.9.49",
+  "version": "0.9.50",
   "description": "A word processor for authors. Distraction-free by default.",
   "homepage": "https://github.com/raycrews/neo-ai",
   "main": "main.js",
@@ -136,7 +136,8 @@
       "branch": "stable",
       "finishArgs": [
         "--share=ipc",
-        "--socket=x11",
+        "--socket=wayland",
+        "--socket=fallback-x11",
         "--device=dri",
         "--share=network",
         "--filesystem=home",
@@ -149,12 +150,13 @@
       ],
       "files": [
         [
+          "build/flatpak-launcher.sh",
+          "/bin/electron-wrapper"
+        ],
+        [
           "build/io.github.raycrews.neoai.metainfo.xml",
           "/share/metainfo/io.github.raycrews.neoai.metainfo.xml"
         ]
-      ],
-      "executableArgs": [
-        "--ozone-platform=x11"
       ]
     }
   },

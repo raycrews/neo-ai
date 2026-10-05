@@ -8,6 +8,8 @@ const asar = require('@electron/asar');
 const http = require('node:http');
 const version = require('../package.json').version;
 const flatpak = process.argv[2] === '--flatpak';
+const nativeWayland = flatpak && process.argv.includes('--wayland');
+const x11Session = flatpak && process.argv.includes('--x11');
 const appId = 'io.github.raycrews.neoai';
 const label = flatpak ? 'Flatpak' : 'AppImage';
 const image = path.resolve(process.argv[2] || `dist/Neo-AI-${version}-linux-x86_64.AppImage`);
@@ -84,13 +86,14 @@ async function launch() {
   if (flatpak) flags.push('--inspect=0', '--user-data-dir=' + path.join(config, 'Neo-AI'));
   const isolated = { HOME: home, XDG_CONFIG_HOME: config,
     XDG_DATA_HOME: path.join(home, '.local/share'), XDG_CACHE_HOME: path.join(home, '.cache'),
-    ...(flatpak ? { XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'neo-test-unavailable-wayland' } : {}) };
+    ...(flatpak ? { XDG_SESSION_TYPE: x11Session ? 'x11' : 'wayland',
+      WAYLAND_DISPLAY: nativeWayland ? process.env.WAYLAND_DISPLAY : 'neo-test-unavailable-wayland' } : {}) };
   // Flatpak itself uses the build user's installation; only the application gets
   // this temporary profile. Neither package can touch a writer's settings/books.
   child = flatpak
     ? spawn('flatpak', ['run', '--user', '--filesystem=' + scratch,
       ...Object.entries(isolated).map(([key, value]) => `--env=${key}=${value}`), appId, ...flags],
-      { stdio: ['ignore', 'pipe', 'pipe'] })
+      { env: { ...process.env, WAYLAND_DISPLAY: isolated.WAYLAND_DISPLAY }, stdio: ['ignore', 'pipe', 'pipe'] })
     : spawn(image, flags, { env: { ...process.env, ...isolated, APPIMAGE_EXTRACT_AND_RUN: '1' },
       stdio: ['ignore', 'pipe', 'pipe'] });
   for (const stream of [child.stdout, child.stderr]) stream.on('data', data => {
@@ -100,6 +103,15 @@ async function launch() {
     if (child.exitCode !== null) throw new Error(label + ' exited: ' + log);
     return endpoint;
   }, 'packaged startup');
+  if (flatpak) {
+    const mainEndpoint = log.match(/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/)?.[1];
+    assert.ok(mainEndpoint, 'test main-process inspector');
+    const main = await connect(mainEndpoint);
+    assert.equal(await evaluate(main, "process.mainModule.require('electron').app.commandLine.getSwitchValue('ozone-platform')"), nativeWayland ? 'wayland' : 'x11');
+    if (nativeWayland) assert.equal(await evaluate(main, '!!process.env.DISPLAY'), false, 'native Wayland test has no X11 display');
+    main.close();
+    console.log('PASS: packaged display selection: ' + (nativeWayland ? 'native Wayland without X11' : x11Session ? 'X11 session' : 'X11 fallback with stale Wayland session variables'));
+  }
   return attach(endpoint);
 }
 async function close() {
