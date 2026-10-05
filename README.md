@@ -510,6 +510,7 @@ and restores defaults. Standard text editing keys and writing gestures stay fixe
 The Help shortcut reference reflects custom menu bindings.
 
 Linux AppImage build and testing instructions: [Linux testing guide](docs/LINUX.md).
+Linux Flatpak installation and testing: [Flatpak guide](docs/FLATPAK.md).
 
 The app is very simple: an Electron shell (`main.js`), a preload bridge (`preload.js`), and a renderer (`app.js` + `styles.css` + `index.html`). If you know JavaScript, you can change NEO. Have at it.
 

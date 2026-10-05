@@ -24,6 +24,11 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const evaluate = (win,code) => win.webContents.executeJavaScript(code,true);
 async function until(fn,label) {const end=Date.now()+12000;while(Date.now()<end){if(await fn())return;await pause(40)}throw new Error('Timed out: '+label)}
 async function select(win,selector,editable=false) {
+  // Focus the visible window before selecting; showing a hidden fixture after
+  // selection can clear it before native mouse input reaches the renderer.
+  win.show(); win.focus();
+  await until(()=>win.isFocused(),'selection window focused');
+  await evaluate(win,'new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())))');
   await evaluate(win,`(() => {const el=document.querySelector(${JSON.stringify(selector)});el.scrollIntoView({block:'center'});${editable?'el.focus();':''}if(el.setSelectionRange){el.select();return}const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r)})()`);
 }
 async function rightClick(win,selector) {

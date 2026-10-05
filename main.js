@@ -1547,7 +1547,7 @@ if (!app.requestSingleInstanceLock()) {
 // logged and swallowed, so an unsigned build or offline machine never notices.
 // (macOS auto-update only works once the app is code-signed.)
 function checkForUpdates() {
-  if (!app.isPackaged) return;
+  if (!app.isPackaged || process.env.FLATPAK_ID) return;
   try {
     const { autoUpdater } = require('electron-updater');
     autoUpdater.logger = null;
