@@ -13,12 +13,17 @@ Desktop** GitHub Actions workflow. In that folder, run:
 sha256sum -c SHA256SUMS-flatpak-x64.txt
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install --user flathub org.freedesktop.Platform//25.08
-flatpak install --user ./Neo-AI-0.9.48-linux-x86_64.flatpak
+flatpak install --user ./Neo-AI-0.9.49-linux-x86_64.flatpak
 flatpak run io.github.raycrews.neoai
 ```
 
 Neo-AI also appears in the desktop application menu. The first runtime download
 can be large; it is shared with other Flatpak applications.
+
+The launcher explicitly selects X11/Xwayland, matching the package's display
+permission even when the desktop session uses Wayland. Version 0.9.48 omitted
+this flag and could fail at startup on Wayland desktops. To open that older
+version temporarily, use `flatpak run io.github.raycrews.neoai --ozone-platform=x11`.
 
 Install a later Neo-AI bundle with the same `flatpak install --user ./…flatpak`
 command. Preferences are retained. `flatpak update` updates the shared runtime,
@@ -71,11 +76,13 @@ Ubuntu 24.04). Add Flathub as above, then:
 flatpak install --user flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08 org.electronjs.Electron2.BaseApp//25.08
 npm ci
 npm run package:flatpak
-flatpak install --user ./dist/Neo-AI-0.9.48-linux-x86_64.flatpak
+flatpak install --user ./dist/Neo-AI-0.9.49-linux-x86_64.flatpak
 dbus-run-session -- xvfb-run -a npm run test:flatpak
 ```
 
-The packaged test uses temporary settings and writing. It checks first launch,
+The packaged test uses temporary settings and writing. It advertises a Wayland
+session without a Wayland socket and leaves display selection to the installed
+launcher, catching the 0.9.48 startup regression. It checks first launch,
 formatted content, backups, appearance, shortcuts, and persistence. Zypak provides
 Electron sandbox integration; no `--no-sandbox` workaround is used.
 

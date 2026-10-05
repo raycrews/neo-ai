@@ -77,10 +77,14 @@ const provider = http.createServer(async (req, res) => {
 });
 async function launch() {
   log = ''; let endpoint;
-  const flags = ['--remote-debugging-port=0', '--ozone-platform=x11', '--disable-dev-shm-usage'];
+  const flags = ['--remote-debugging-port=0', '--disable-dev-shm-usage'];
+  // Flatpak must select a permitted display backend in its own launcher.
+  // Supplying x11 here would hide failures on Wayland desktops such as Pop!_OS.
+  if (!flatpak) flags.push('--ozone-platform=x11');
   if (flatpak) flags.push('--inspect=0', '--user-data-dir=' + path.join(config, 'Neo-AI'));
   const isolated = { HOME: home, XDG_CONFIG_HOME: config,
-    XDG_DATA_HOME: path.join(home, '.local/share'), XDG_CACHE_HOME: path.join(home, '.cache') };
+    XDG_DATA_HOME: path.join(home, '.local/share'), XDG_CACHE_HOME: path.join(home, '.cache'),
+    ...(flatpak ? { XDG_SESSION_TYPE: 'wayland', WAYLAND_DISPLAY: 'neo-test-unavailable-wayland' } : {}) };
   // Flatpak itself uses the build user's installation; only the application gets
   // this temporary profile. Neither package can touch a writer's settings/books.
   child = flatpak
