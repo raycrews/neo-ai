@@ -116,6 +116,7 @@ jobs:
           fi
       - name: Test installed Apple silicon DMG
         if: runner.os == 'macOS'
+        timeout-minutes: 5
         run: npm run test:packaged-mac
       - name: Prepare Mac checksums and testing notes
         if: runner.os == 'macOS'

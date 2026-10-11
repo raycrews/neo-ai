@@ -47,6 +47,12 @@ async function evaluate(client, expression, awaitPromise = true) {
   return result.result.value;
 }
 let child, page, main, mounted = false, log = '';
+const watchdog = setTimeout(() => {
+  console.error('Packaged Mac test exceeded three minutes. Last application output:\n' + log.slice(-12000));
+  if (child && child.exitCode === null) child.kill('SIGKILL');
+  if (mounted) { try { execFileSync('hdiutil', ['detach', '-force', volume], { timeout: 15000 }); } catch {} }
+  process.exit(1);
+}, 180000);
 const provider = http.createServer(async (req, res) => {
   for await (const chunk of req) { /* Drain the test request. */ }
   if (req.url === '/v1/models') {
@@ -60,6 +66,7 @@ const provider = http.createServer(async (req, res) => {
   res.writeHead(404); res.end();
 });
 async function launch() {
+  console.log('Launching installed app with temporary settings.');
   log = ''; let endpoint, inspector;
   child = spawn(executable, ['--remote-debugging-port=0', '--inspect=0', '--user-data-dir=' + profile], {
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -87,18 +94,20 @@ async function launch() {
   return target;
 }
 async function close() {
+  console.log('Quitting installed app.');
   page?.close();
   await evaluate(main, "setTimeout(() => process.mainModule.require('electron').app.quit(), 100); undefined", false);
   main.close();
   await until(() => child.exitCode !== null, 'application quit');
 }
 (async () => {
-  execFileSync('hdiutil', ['verify', dmg], { stdio: 'inherit' });
-  execFileSync('hdiutil', ['attach', '-readonly', '-nobrowse', '-mountpoint', volume, dmg], { stdio: 'inherit' });
+  console.log('Verifying and mounting DMG.');
+  execFileSync('hdiutil', ['verify', dmg], { stdio: 'inherit', timeout: 60000 });
+  execFileSync('hdiutil', ['attach', '-readonly', '-nobrowse', '-mountpoint', volume, dmg], { stdio: 'inherit', timeout: 60000 });
   mounted = true;
   assert.ok(fs.existsSync(path.join(volume, 'Applications')), 'DMG Applications shortcut');
-  execFileSync('ditto', [path.join(volume, 'Neo-AI.app'), installed]);
-  execFileSync('hdiutil', ['detach', volume], { stdio: 'inherit' }); mounted = false;
+  execFileSync('ditto', [path.join(volume, 'Neo-AI.app'), installed], { timeout: 60000 });
+  execFileSync('hdiutil', ['detach', volume], { stdio: 'inherit', timeout: 30000 }); mounted = false;
   assert.equal(execFileSync('lipo', ['-archs', executable], { encoding: 'utf8' }).trim(), 'arm64');
   const archive = path.join(installed, 'Contents', 'Resources', 'app.asar');
   assert.equal(JSON.parse(asar.extractFile(archive, 'package.json')).version, version);
@@ -106,6 +115,7 @@ async function close() {
   console.log('PASS: DMG verifies, app installs by copying, and executable is ARM64.');
   provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
   let target = await launch();
+  console.log('Checking onboarding and Mac title-bar spacing.');
   assert.equal(await evaluate(page, 'window.neo.libraryPath()'), libraryDir);
   assert.equal(await evaluate(page, 'window.neo.appVersion()'), version);
   assert.equal(await evaluate(page, 'library.authorName'), '');
@@ -123,6 +133,7 @@ async function close() {
     await openBook(meta.id); return meta.id;
   })()`);
   assert.match(await evaluate(page, 'document.querySelector(".chapter-body").innerHTML'), /<strong>saved<\/strong>/);
+  console.log('Testing settings and backup.');
   await evaluate(page, 'window.neo.openSettings()'); const settings = await target('settings.html');
   assert.equal((await evaluate(settings, 'window.settingsAPI.read()')).profiles.length, 0);
   assert.deepEqual(await evaluate(settings, 'window.settingsAPI.instructionLibrary()'), []);
@@ -130,6 +141,7 @@ async function close() {
   await evaluate(settings, 'window.settingsAPI.saveAppearance({theme:"light",accent:"#639fe8"})');
   await evaluate(settings, 'window.settingsAPI.backupNow()');
   await evaluate(settings, 'window.close()').catch(() => {}); settings.close();
+  console.log('Testing AI chat.');
   await evaluate(page, 'switchTab("ai-assistance")');
   await until(() => evaluate(page, '!!window.neoChatView.current() && !window.neoChatView.requestBusy'), 'chat ready');
   await evaluate(page, `(() => { const v=window.neoChatView; v.draft.value='Reply to this Mac test'; v.draft.dispatchEvent(new Event('input')); return v.send(); })()`);
@@ -138,6 +150,7 @@ async function close() {
   fs.writeFileSync('dist/test-results/mac-arm64.png', Buffer.from((await page.send('Page.captureScreenshot')).data, 'base64'));
   await close();
   target = await launch();
+  console.log('Checking saved writing and settings after reopening.');
   assert.equal(await evaluate(page, 'document.querySelector("#firstrun").hidden'), true);
   await evaluate(page, `openBook(${JSON.stringify(id)})`);
   assert.match(await evaluate(page, 'document.querySelector(".chapter-body").textContent'), /saved.*Mac/);
@@ -147,7 +160,8 @@ async function close() {
   console.log('PASS: installed ARM64 app onboarding, Mac title-bar space, formatted writing, AI reply, settings, backup, and persistence.');
 })().catch(error => { console.error(error); console.error(log.slice(-12000)); process.exitCode = 1; })
   .finally(() => {
+    clearTimeout(watchdog);
     provider.close(); page?.close(); main?.close();
-    if (child && child.exitCode === null) child.kill('SIGTERM');
-    if (mounted) execFileSync('hdiutil', ['detach', volume]);
+    if (child && child.exitCode === null) child.kill('SIGKILL');
+    if (mounted) execFileSync('hdiutil', ['detach', '-force', volume], { timeout: 15000 });
   });
