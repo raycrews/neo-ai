@@ -1,7 +1,7 @@
 {
   "name": "neo-ai",
   "productName": "Neo-AI",
-  "version": "0.9.46",
+  "version": "0.9.47",
   "description": "A word processor for authors. Distraction-free by default.",
   "homepage": "https://github.com/raycrews/neo-ai",
   "main": "main.js",
@@ -25,7 +25,9 @@
     "test:instruction-library": "electron scripts/test-instruction-library.cjs",
     "test:menus": "electron scripts/test-menus.cjs",
     "test:setup-options": "electron scripts/test-setup-options.cjs",
-    "test:clean-start": "electron scripts/test-clean-start.cjs"
+    "test:clean-start": "electron scripts/test-clean-start.cjs",
+    "package:appimage": "electron-builder --linux AppImage --x64 --publish never",
+    "test:appimage": "node scripts/test-appimage.cjs"
   },
   "build": {
     "appId": "io.github.raycrews.neoai",
@@ -94,7 +96,10 @@
           "Keywords": "writing;writer;novel;book;author;manuscript;wordprocessor;"
         }
       },
-      "maintainer": "raycrews"
+      "maintainer": "raycrews",
+      "executableName": "neo-ai",
+      "icon": "build/icon.png",
+      "syncDesktopName": true
     },
     "portable": {
       "unpackDirName": true
@@ -116,7 +121,9 @@
       "!.github/**",
       "!scripts/**",
       "!tests/**",
-      "!locales/_template.json"
+      "!locales/_template.json",
+      "!tools/**",
+      "!docs/**"
     ]
   },
   "author": "Hugh Howey",
@@ -142,5 +149,9 @@
   },
   "allowScripts": {
     "electron@33.4.11": true
-  }
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "desktopName": "io.github.raycrews.neoai.desktop"
 }

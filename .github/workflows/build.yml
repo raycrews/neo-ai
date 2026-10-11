@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   build:
+    name: Build and test (${{ matrix.platform }})
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -20,87 +22,87 @@ jobs:
             platform: win
           - os: macos-latest
             platform: mac
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             platform: linux
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
+      - name: Install Linux desktop test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-0 libnss3 libasound2 libgbm1 libatk-bridge2.0-0 libfuse2 xvfb xauth dbus-x11 openbox
       - run: npm ci
       - run: npm test
       - name: Test detached windows (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:panes
-      - name: Test detached windows (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:panes
       - name: Test app settings (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:settings
-      - name: Test app settings (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:settings
       - name: Test AI chat (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:chat
-      - name: Test AI chat (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:chat
       - name: Test general settings and backup recovery (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:general
-      - name: Test general settings and backup recovery (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:general
       - name: Test book search (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:search
-      - name: Test book search (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:search
       - name: Test exports (Windows and macOS)
         # Export tests use a separate temporary library on every platform.
         if: runner.os != 'Linux'
         run: npm run test:export
-      - name: Test exports (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:export
       - name: Test manuscript revisions (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:revision
-      - name: Test manuscript revisions (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:revision
       - name: Test instruction library (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:instruction-library
-      - name: Test instruction library (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:instruction-library
       - name: Test native menus (Windows and macOS)
         if: runner.os != 'Linux'
         run: npm run test:menus
-      - name: Test native menus (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run -a npm run test:menus
       - name: Test email and shortcut settings (Windows)
         if: runner.os == 'Windows'
         run: npm run test:setup-options
-      - name: Package Windows or Linux
-        if: runner.os != 'macOS'
-        run: npx electron-builder --${{ matrix.platform }} --publish never
+      - name: Test Linux desktop
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a bash scripts/test-linux.sh
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        run: npm run package:win -- --publish never
+      - name: Package x64 AppImage
+        if: runner.os == 'Linux'
+        run: npm run package:appimage
+      - name: Test packaged AppImage
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a npm run test:appimage
+      - name: Upload AppImage test screenshots
+        if: runner.os == 'Linux' && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-desktop-test-results
+          path: dist/test-results/
+          if-no-files-found: ignore
+      - name: Checksum AppImage
+        if: runner.os == 'Linux'
+        working-directory: dist
+        run: sha256sum *.AppImage > SHA256SUMS-linux-x64.txt
       - name: Package macOS
         if: runner.os == 'macOS'
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_TEAM_ID || '' }}
         run: |
           if [[ -n "$CSC_LINK" && -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
             npx electron-builder --mac --publish never
@@ -109,7 +111,7 @@ jobs:
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --config.mac.notarize=false --publish never
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: neo-ai-${{ matrix.platform }}
           if-no-files-found: error
@@ -118,22 +120,23 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.AppImage
+            dist/SHA256SUMS-linux-x64.txt
             dist/*.yml
             dist/*.blockmap
 
   draft-release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: neo-ai-*
           path: release
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           files: release/*

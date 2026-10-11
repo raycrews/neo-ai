@@ -69,7 +69,7 @@
     const id = selected;
     run(async () => { entries = await window.settingsAPI.deleteInstruction(id); select(entries[0]); status('Entry deleted.'); });
   };
-  el('copy').onclick = () => run(async () => { await navigator.clipboard.writeText(el('text').value); status('Instructions copied.'); });
+  el('copy').onclick = () => run(async () => { await window.settingsAPI.copyInstruction(el('text').value); status('Instructions copied.'); });
   el('import').onclick = () => {
     if (!canLeave()) return;
     run(async () => { const value = await window.settingsAPI.importInstruction(); if (value) { select({ ...value, name: uniqueName(value.name) }, false); status('Text imported. Save entry to keep it.'); } });

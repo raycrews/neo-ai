@@ -26,3 +26,10 @@ test('portable packages extract to a new directory on each launch', () => {
   // Prevent the exiting launcher from deleting a newly restarted app's files.
   assert.equal(require('../package.json').build.portable.unpackDirName, true);
 });
+
+test('AppImage restarts the durable image with its arguments', () => {
+  assert.deepEqual(relaunchOptions({ platform: 'linux',
+    env: { APPIMAGE: '/home/writer/My Apps/Neo-AI.AppImage' }, argv: ['/tmp/.mount_neo/neo-ai', '--lang=en-US'] }), {
+    execPath: '/home/writer/My Apps/Neo-AI.AppImage', args: ['--lang=en-US']
+  });
+});

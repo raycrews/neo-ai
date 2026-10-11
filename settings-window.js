@@ -39,6 +39,11 @@ function installSettingsWindow({ app, BrowserWindow, ipcMain, dialog, protector,
   handle('settings:save', (_event, data) => { const result = connections.save(data); contextChanged(); return result; });
   handle('settings:assistants', () => assistants.snapshot());
   handle('settings:instructionLibrary', () => instructionLibrary.read());
+  handle('settings:copyInstruction', (_event, text) => {
+    validateEntry({ name: 'Instructions', text });
+    require('electron').clipboard.writeText(text);
+    return true;
+  });
   handle('settings:saveInstruction', (_event, data) => instructionLibrary.save(data));
   handle('settings:deleteInstruction', (_event, id) => instructionLibrary.remove(id));
   handle('settings:importInstruction', async () => {

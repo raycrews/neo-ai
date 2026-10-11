@@ -26,8 +26,6 @@ fs.writeFileSync(path.join(bookDir, 'chapters', 'ch-one.html'), '<p>First chapte
 fs.writeFileSync(path.join(bookDir, 'chapters', 'ch-two.html'), '<p>Second chapter prose remains intact.</p>');
 app.setPath('userData', userData);
 process.env.NEO_TEST_HEADLESS = '1';
-// Headless Linux CI does not provide a setuid Chromium sandbox.
-if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 const rendererErrors = [];
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (event) => {
@@ -229,6 +227,9 @@ app.whenReady().then(async () => {
   await until(() => evaluate(pane, 'typeof snapshot !== "undefined" && !!snapshot'), 'pane ready again');
   pane.setBounds({ x: 30, y: 30, width: 600, height: 650 });
   await until(() => JSON.parse(fs.readFileSync(path.join(userData, 'settings.json'), 'utf8')).paneWindows?.outline?.width === 600, 'saved bounds');
+  // Wait for the resized native surface before requesting a screenshot.
+  pane.showInactive();
+  await pause(300);
   const image = await pane.webContents.capturePage();
   fs.writeFileSync(path.join(scratch, 'outline.png'), image.toPNG());
   console.log('Screenshot: ' + path.join(scratch, 'outline.png'));

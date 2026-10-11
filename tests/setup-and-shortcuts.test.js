@@ -30,13 +30,16 @@ test('profile pointer cannot escape profile directory', t => {
   assert.throws(() => selectProfile(root, root), /Invalid/);
 });
 test('shortcuts accept valid changes and reject conflicts and editing keys', () => {
-  assert.deepEqual(validate({}), {}); assert.deepEqual(validate({}, 'darwin'), {});
-  assert.equal(validate({ searchBook: 'Shift+Control+G' }).searchBook, 'Control+Shift+G');
-  assert.throws(() => validate({ searchBook: 'Control+F' }), /already used/);
-  assert.throws(() => validate({ find: 'Control+C' }), /reserved/);
-  assert.throws(() => validate({ find: 'G' }), /Include/);
-  assert.throws(() => validate({ unknown: 'F4' }), /Unknown/);
-  assert.equal(snapshot(validate({ find: '', searchBook: 'Control+F' })).find(row => row.id === 'find').accelerator, '');
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const mod = platform === 'darwin' ? 'Command' : 'Control';
+    assert.deepEqual(validate({}, platform), {});
+    assert.equal(validate({ searchBook: `Shift+${mod}+G` }, platform).searchBook, `${mod}+Shift+G`);
+    assert.throws(() => validate({ searchBook: `${mod}+F` }, platform), /already used/);
+    assert.throws(() => validate({ find: `${mod}+C` }, platform), /reserved/);
+    assert.throws(() => validate({ find: 'G' }, platform), /Include/);
+    assert.throws(() => validate({ unknown: 'F4' }, platform), /Unknown/);
+    assert.equal(snapshot(validate({ find: '', searchBook: `${mod}+F` }, platform), platform).find(row => row.id === 'find').accelerator, '');
+  }
 });
 test('email chooser encodes recipients and content and reports launch failure without sending', async () => {
   const message = { to: 'reader@example.com', subject: 'Draft & notes', body: 'Attach this PDF.\nReview first.' };
