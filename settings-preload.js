@@ -1,4 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
+window.addEventListener('focusin', event => ipcRenderer.send('settings:captureShortcut', event.target.matches?.('#shortcut-list input') === true));
+window.addEventListener('focusout', () => ipcRenderer.send('settings:captureShortcut', false));
 contextBridge.exposeInMainWorld('neoAppearance', {
   read: () => ipcRenderer.invoke('appearance:read'),
   onChange: callback => ipcRenderer.on('appearance:changed', (_event, value) => callback(value))
@@ -9,7 +11,10 @@ const call = async (channel, ...args) => {
   return result.value;
 };
 contextBridge.exposeInMainWorld('settingsAPI', {
+  onNavigate: callback => ipcRenderer.on('settings:navigate', (_event, page) => callback(page)),
   read: () => call('settings:read'),
+  shortcuts: () => call('settings:shortcuts'),
+  saveShortcut: data => call('settings:saveShortcut', data),
   backupStatus: () => call('settings:backupStatus'),
   backupNow: () => call('settings:backupNow'),
   backupFolder: () => call('settings:backupFolder'),

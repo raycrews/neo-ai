@@ -72,7 +72,11 @@ const K = (mac, pc) => (IS_MAC ? mac : pc);
 const KZ = K('⌘Z', 'Ctrl+Z');
 const KPH = K('⌘⇧X', 'Ctrl+Shift+X');
 const KDA = K('⌘⇧D', 'Ctrl+Shift+D');
-const KHELP = K('⌘/', 'Ctrl+/');
+let KHELP = K('⌘/', 'Ctrl+/');
+let shortcutRows = [];
+function updateShortcuts(rows) { shortcutRows = rows; KHELP = rows.find(row => row.id === 'help')?.accelerator || 'Help → Keyboard Shortcuts'; }
+window.neo.shortcuts().then(updateShortcuts);
+window.neo.onShortcuts(updateShortcuts);
 
 // Scrollbars stay invisible until you scroll, then fade away again —
 // chrome only when needed.
@@ -2248,7 +2252,7 @@ document.addEventListener('keydown', (e) => {
   // accelerator cannot name, so Ctrl+; never fired there. Shift is required
   // in this branch because the plain Ctrl+; case belongs to the menu on the
   // layouts that have it; this catches the ones that need Shift to type ';'.
-  if (cmd && e.shiftKey && !e.altKey && e.key === ';') {
+  if (cmd && e.shiftKey && !e.altKey && e.key === ';' && shortcutRows.find(row => row.id === 'spellcheck')?.accelerator === (IS_MAC ? 'Command+;' : 'Control+;')) {
     e.preventDefault();
     toggleSpellcheck();
   }
@@ -5009,21 +5013,22 @@ function shortcutSections() {
     ] },
     { title: 'App & files', rows: [
       [KHELP, 'Keyboard shortcuts'],
-      [K('⌘,', 'Ctrl+,'), 'Goals and writing sprints'],
+      [K('⌘,', 'Ctrl+,'), 'Settings'],
       [K('⌘⇧I', 'Ctrl+Shift+I'), 'Import manuscripts'],
       [K('⌘E', 'Ctrl+E'), 'Email a draft to yourself']
     ] },
     { title: 'View & window', rows: [
       [[K('⌃⌘F', 'F11'), K('⌘Enter', 'Ctrl+Enter')], 'Toggle full screen'],
       [K('⌘⇧T', 'Ctrl+Shift+T'), 'Toggle typewriter scrolling'],
+      [K('⌘⇧U', 'Ctrl+Shift+U'), 'Open outline in separate window'],
       [K('⌘⇧O', 'Ctrl+Shift+O'), 'Cycle focus mode', 'Off → paragraph → sentence → off.'],
       [K('⌘M', 'Ctrl+M'), 'Minimize window'],
       [K('⌘W', 'Ctrl+W'), 'Close window'],
       ...(IS_MAC ? [
-        ['⌘H', 'Hide NEO'],
+        ['⌘H', 'Hide Neo-AI'],
         ['⌘⌥H', 'Hide other apps']
       ] : []),
-      ...(!/win/i.test(navigator.platform) ? [[K('⌘Q', 'Ctrl+Q'), 'Quit NEO']] : [])
+      ...(!/win/i.test(navigator.platform) ? [[K('⌘Q', 'Ctrl+Q'), 'Quit Neo-AI']] : [])
     ] }
   ];
 }
@@ -5052,7 +5057,7 @@ function showHelp() {
   const keyName = (key) => key.replaceAll('⌘', 'Command ').replaceAll('⇧', 'Shift ')
     .replaceAll('⌥', 'Option ').replaceAll('⌃', 'Control ').replaceAll('−', '-');
   const content = bd.querySelector('.shortcuts-content');
-  const sections = shortcutSections().map((section, index) => `
+  const sections = shortcutSections().map(section => ({ ...section, rows: section.rows.map(([keys, label, detail]) => { const row = shortcutRows.find(row => row.label === label); return [row ? (Array.isArray(keys) ? [row.accelerator || 'Unassigned', ...keys.slice(1)] : row.accelerator || 'Unassigned') : keys, label, detail]; }) })).map((section, index) => `
     <section class="shortcuts-section" style="order:${index}"><h3>${escHtml(t(section.title))}</h3><dl>${section.rows.map(([keys, label, detail]) => `
       <div class="shortcut-row">
         <dt>${escHtml(t(label))}${detail ? `<small>${escHtml(t(detail))}</small>` : ''}</dt>
@@ -5598,40 +5603,29 @@ async function doExport(format) {
 }
 
 function chooseEmailMethod() {
-  // Apple Mail only exists on Macs; elsewhere Gmail
-  if (!navigator.platform.toLowerCase().includes('mac')) return Promise.resolve('gmail');
-  return new Promise((resolve) => {
-    const bd = document.createElement('div');
-    bd.className = 'modal-backdrop';
-    bd.innerHTML = `
-      <div class="modal" style="width:440px">
-        <h2 style="font-size:16px">${t('How should NEO email your drafts?')}</h2>
-        <div class="fr-choices" style="margin-top:14px">
-          <button class="fr-choice" data-m="gmail">
-            <strong>Gmail</strong>
-            <span>${t('Opens a pre-filled compose window in your browser. NEO shows you the PDF to drag into it.')}</span>
-          </button>
-          <button class="fr-choice" data-m="mail">
-            <strong>Apple Mail</strong>
-            <span>${t('Fully automatic — the PDF is attached and addressed. Just hit send.')}</span>
-          </button>
-        </div>
-      </div>`;
+  return new Promise(resolve => {
+    const bd = document.createElement('div'); bd.className = 'modal-backdrop'; bd.id = 'email-method-dialog';
+    const options = [['default', 'Default email app', 'Open the email app configured on this computer.'], ['gmail', 'Gmail in browser', 'Open a Gmail compose window in your browser.'], ['outlook', 'Outlook.com in browser', 'Open an Outlook.com compose window in your browser.']];
+    if (IS_MAC) options.push(['mail', 'Apple Mail', 'Open Apple Mail with the PDF attached.']);
+    bd.innerHTML = '<div class="modal" style="width:460px"><h2>How should Neo-AI open email drafts?</h2><p>Choose your email app or service. You review and send each message yourself.</p><div class="fr-choices">' + options.map(([id, name, description]) => '<button class="fr-choice" data-method="' + id + '"><strong>' + name + '</strong><span>' + description + '</span></button>').join('') + '</div><p class="hint">For browser services and the default email app, attach the PDF from the folder Neo-AI opens.</p><button class="m-cancel btn-quiet">Cancel</button></div>';
     document.body.appendChild(bd);
-    bd.querySelectorAll('.fr-choice').forEach((b) => {
-      b.onclick = () => { bd.remove(); resolve(b.dataset.m); };
-    });
+    const done = method => { bd.remove(); resolve(method); };
+    bd.querySelectorAll('[data-method]').forEach(button => { button.onclick = () => done(button.dataset.method); });
+    bd.querySelector('.m-cancel').onclick = () => done(null);
+    bd.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); done(null); } });
+    bd.querySelector('[data-method]').focus();
   });
 }
 
 async function emailSettings() {
   const addr = await askInput(t('Email drafts to'), t('you@example.com'), library.emailAddress || '');
   if (addr === null) return false;
-  if (addr) library.emailAddress = addr;
-  library.emailMethod = await chooseEmailMethod();
+  if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(addr)) { toast('Enter a valid email address.', 5000); return false; }
+  const method = await chooseEmailMethod();
+  if (!method) return false;
+  library.emailAddress = addr; library.emailMethod = method;
   await window.neo.writeLibrary(library);
-  toast(t('Email settings saved'));
-  return true;
+  toast('Email settings saved.'); return true;
 }
 
 async function manuscriptHash() {
@@ -5641,9 +5635,13 @@ async function manuscriptHash() {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+let emailDraftBusy = false;
 async function doEmailDraft() {
+  if (emailDraftBusy) return;
   if (!book) { toast(t('Open a book first')); return; }
-  flushAllSaves();
+  emailDraftBusy = true;
+  try {
+  await flushAllSaves();
   if (!library.emailAddress || !library.emailMethod) {
     const ok = await emailSettings();
     if (!ok) return;
@@ -5654,9 +5652,7 @@ async function doEmailDraft() {
   const body = t('Draft snapshot of “{title}” — {n} words.', { title: book.title, n: total }) + '\n'
     + t('Sent from NEO on {date}.', { date: new Date().toLocaleString(NeoI18n.getLocale()) }) + '\n\n'
     + t('SHA-256 fingerprint of the manuscript text:') + `\n${hash}\n\n`
-    + (library.emailMethod === 'gmail'
-      ? t('The PDF snapshot is in the Finder window NEO just opened — drag it into this email before sending.')
-      : t('PDF snapshot attached.'));
+    + (library.emailMethod === 'mail' && IS_MAC ? 'PDF snapshot attached.' : 'Attach the PDF from the folder Neo-AI opened before sending.');
   toast(t('Preparing your draft…'));
   const res = await window.neo.emailDraft({
     to: library.emailAddress,
@@ -5666,9 +5662,12 @@ async function doEmailDraft() {
     defaultName: safeName(book.title),
     method: library.emailMethod
   });
-  if (res.method === 'gmail') toast(t('Gmail compose opened — drag in the PDF NEO revealed, then send'), 8000);
-  else if (res.ok) toast(t('Draft handed to Mail — hit send for your timestamp'));
-  else toast(t('Mail unavailable — snapshot saved to your Exports folder instead'));
+  const notice = res.manualAttachment
+    ? (res.ok ? 'Email compose requested. Attach the PDF from the folder that opened, then send. If no compose window appears, check your selected email app in File → Email Settings.' : 'The email app could not be opened. Your PDF is saved in the folder shown. Choose another method in File → Email Settings.')
+    : (res.ok ? 'Draft opened in Apple Mail. Review it and click Send.' : 'Apple Mail could not be opened. Your PDF is saved in the folder shown.');
+  await optionModal('Email draft', notice, [{ label: 'OK', value: 'ok' }]);
+  } catch (error) { toast('Could not prepare email draft: ' + error.message, 7000); }
+  finally { emailDraftBusy = false; }
 }
 
 // Help → Check for Update…: on-demand release lookup, only ever runs on a click
@@ -5698,10 +5697,11 @@ async function checkForUpdate() {
 async function showAbout() {
   const v = await window.neo.appVersion();
   const bd = document.createElement('div');
+  bd.id = 'app-about';
   bd.className = 'modal-backdrop';
   bd.innerHTML = `
     <div class="modal" style="width:340px;text-align:center">
-      <h2 style="font-size:22px;letter-spacing:6px">NEO</h2>
+      <h2 style="font-size:22px;letter-spacing:2px">Neo-AI</h2>
       <p style="color:#999">${t('Version {version}', { version: v })}</p>
       <p style="font-size:13px;color:#777">${t('A word processor for authors.')}</p>
       <div style="margin-top:16px">
@@ -5745,7 +5745,7 @@ window.neo.onMenu(async (msg) => {
   }
   if (msg.type === 'coverArt') openCoverArt();
   if (msg.type === 'align') {
-    applyAlign(msg.value);
+    window.neoDocumentFormat?.align(msg.value);
   }
   if (msg.type === 'poetry') togglePoetry();
   if (msg.type === 'uiLanguage') {

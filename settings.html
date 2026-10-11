@@ -14,6 +14,7 @@
     <header><span class="eyebrow">NEO-AI</span><h1>Settings</h1><p>Preferences for this device</p></header>
     <nav aria-label="Settings categories">
       <button data-page="general">General</button>
+      <button data-page="shortcuts">Keyboard Shortcuts</button>
       <button data-page="ai">AI</button>
       <button data-page="connections" aria-current="page">AI Connections</button>
     </nav>
@@ -39,6 +40,14 @@
         <button id="appearance-defaults" type="button">Restore defaults</button><p id="appearance-status" role="status" aria-live="polite"></p>
       </div>
       <p id="app-version" class="muted"></p>
+    </section>
+    <section id="shortcuts" hidden>
+      <span class="eyebrow">APPLICATION</span><h2>Keyboard Shortcuts</h2>
+      <p class="intro">Click a shortcut box and press the keys you want to use. Changes save immediately on this device.</p>
+      <p class="hint">These shortcuts control app menu commands. Standard editing keys, writing gestures, and Ctrl+Enter (Command+Enter on Mac) for fullscreen remain available.</p>
+      <p id="shortcut-status" role="status" aria-live="polite"></p>
+      <div id="shortcut-list"></div>
+      <button id="shortcut-defaults" type="button">Restore all shortcut defaults</button>
     </section>
     <section id="ai" hidden>
       <span class="eyebrow">AI</span><h2>Instructions</h2>
@@ -138,5 +147,6 @@
   <script src="settings-assistants.js"></script>
   <script src="settings-instruction-library.js"></script>
   <script src="settings-general.js"></script>
+  <script src="settings-shortcuts.js"></script>
 </body>
 </html>

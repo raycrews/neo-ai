@@ -59,13 +59,16 @@ app.whenReady().then(async () => {
   await query('Fresh replacement'); assert.equal(await count(), 1);
   await query('journal', 'notes'); assert.equal(await count(), 0);
   await evaluate(owner, 'document.querySelector("#book-search-close").click()');
-  const searchMenu = Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items || []).find(item => item.label === 'Search book');
+  owner.show(); owner.focus(); owner.webContents.focus();
+  const searchMenu = Menu.getApplicationMenu().items.flatMap(item => item.submenu?.items || []).find(item => item.label === 'Search Book…');
+  await until(() => searchMenu.enabled, 'search menu available in focused workspace');
   assert.equal(searchMenu.accelerator, 'CmdOrCtrl+Shift+F'); searchMenu.click();
   await until(() => evaluate(owner, 'document.querySelector("#book-search-dialog").open'), 'search shortcut menu');
   await evaluate(owner, 'document.querySelector("#book-search-close").click()');
   const allItems = menu => menu.items.flatMap(item => [item, ...(item.submenu ? allItems(item.submenu) : [])]);
   assert.equal(allItems(Menu.getApplicationMenu()).filter(item => item.accelerator === 'CmdOrCtrl+Shift+F').length, 1);
   owner.show(); owner.focus(); owner.webContents.focus();
+  await until(() => searchMenu.enabled, 'search keyboard shortcut available');
   const modifiers = [process.platform === 'darwin' ? 'meta' : 'control', 'shift'];
   owner.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F', modifiers });
   owner.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'F', modifiers });

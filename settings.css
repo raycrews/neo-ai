@@ -80,3 +80,6 @@ label > input, label > select { margin-top: 7px; }
 .response-settings summary { cursor: pointer; color: var(--accent); }
 
 #backup-path, #backup-status { overflow-wrap: anywhere; }
+
+.shortcut-setting { display:grid; grid-template-columns: minmax(180px,1fr) minmax(180px,1fr) auto auto; gap:8px; align-items:center; margin-bottom:10px; }
+.shortcut-setting label { margin:0; }

@@ -53,6 +53,20 @@ local mock server. It never uses real credentials, external providers, or books.
 
 ## Document formatting
 
+The native menu uses the current workspace: book commands become available when
+a book is open, manuscript display settings when manuscript text is visible, and
+paragraph alignment when the caret or selection is inside an editable document.
+Workspace commands are disabled while a dialog or separate window has focus.
+Standard Cut, Copy, Paste, and Undo continue to act on the focused text field.
+
+**File → Settings…**, **File → Library and Backups…**, and **View → Appearance…**
+open General settings. **Help → Keyboard Shortcuts…** lists the shortcuts,
+including **Ctrl+,** for Settings, **Ctrl+Shift+F** for Search Book and **F11** for
+fullscreen on Windows/Linux. On macOS, use Command in place of Ctrl and
+Control+Command+F for fullscreen. **View → Manuscript Page** controls paper color
+separately from the app theme. `npm run test:menus` checks real menus, selection,
+Undo, separate windows, and shortcuts using an isolated library.
+
 The document header has paragraph/heading styles, bold, italic, underline,
 strikethrough, bulleted/numbered lists, and paragraph alignment. Click into a
 document or select text to use these controls. Changes autosave as standard HTML
@@ -468,15 +482,32 @@ NEO speaks English, French, Spanish, Portuguese, German, Italian, Dutch and Poli
 Requires [Node.js](https://nodejs.org).
 
 ```
-git clone https://github.com/hughhowey/neo.git
-cd neo
+git clone https://github.com/raycrews/neo-ai.git
+cd neo-ai
 npm install
 npm start
 ```
 
-**View → Keyboard Shortcuts…** opens the shortcut reference. You can also press `Cmd+/` on macOS or `Ctrl+/` on Windows and Linux, or use **Help → NEO Shortcuts**.
+**Help → Keyboard Shortcuts…** opens the shortcut reference. You can also press `Cmd+/` on macOS or `Ctrl+/` on Windows and Linux.
 
 To build installers: `npm install electron-builder --save-dev`, then `npm run package` (macOS), `npm run package:win` (Windows), or `npm run package:all`. Output lands in `dist/`.
+
+Windows builds include `Neo-AI-<version>-win-x64-Setup.exe` for installation and
+`Neo-AI-<version>-win-x64.exe` for portable use. Both use the same device settings
+and reopen the chosen library; they do not require Node.js on the user's computer.
+The installer offers **Keep existing settings** or **Start fresh**. Fresh setup
+creates an empty library and a separate device profile; previous books and
+preferences remain on disk. Settings → General → Library folder reopens an
+existing library. No personal settings or books are bundled in the installer.
+
+**File → Email Settings** lets each user choose the default email app, Gmail,
+Outlook.com, or Apple Mail on macOS. Email draft creates a PDF and opens a compose
+request. For the default app and browser services, attach the PDF from the opened
+folder and send it yourself. Neo-AI does not send email automatically.
+
+**Settings → Keyboard Shortcuts** remaps app menu commands, checks for conflicts,
+and restores defaults. Standard text editing keys and writing gestures stay fixed.
+The Help shortcut reference reflects custom menu bindings.
 
 The app is very simple: an Electron shell (`main.js`), a preload bridge (`preload.js`), and a renderer (`app.js` + `styles.css` + `index.html`). If you know JavaScript, you can change NEO. Have at it.
 
