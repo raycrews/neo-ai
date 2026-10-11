@@ -12,7 +12,7 @@ app.setPath('sessionData', selectedProfile);
 const { relaunchOptions } = require('./relaunch');
 const { prepareLibrary, validateLibraryTarget } = require('./library-location');
 const { installPaneWindows } = require('./pane-windows');
-const paneWindows = installPaneWindows({ BrowserWindow, ipcMain, screen, readSettings, writeSettings, dialog });
+const paneWindows = installPaneWindows({ app, BrowserWindow, ipcMain, screen, readSettings, writeSettings, dialog });
 const { protectedStorage, legacySecretStore } = require('./protected-storage');
 const protector = protectedStorage(require('electron').safeStorage);
 const appearance = require('./appearance-main').installAppearance({ app, BrowserWindow, ipcMain, nativeTheme, readSettings, writeSettings });

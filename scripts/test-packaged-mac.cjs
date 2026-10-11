@@ -99,7 +99,8 @@ async function close() {
   page?.close();
   await evaluate(main, "setTimeout(() => process.mainModule.require('electron').app.quit(), 100); undefined", false);
   main.close();
-  await until(() => child.exitCode !== null, 'application quit');
+  await until(() => child.exitCode !== null || child.signalCode, 'application quit');
+  assert.equal(child.exitCode, 0, 'app quits normally after saving');
 }
 (async () => {
   console.log('Verifying and mounting DMG.');
@@ -157,6 +158,16 @@ async function close() {
   assert.match(await evaluate(page, 'document.querySelector(".chapter-body").textContent'), /saved.*Mac/);
   assert.equal(await evaluate(page, 'window.neoAppearance.read().then(v=>v.theme)'), 'light');
   assert.ok(fs.readdirSync(path.join(libraryDir, 'Backups')).some(file => file.endsWith('.zip')));
+  await evaluate(page, 'switchTab("ai-assistance")');
+  await until(() => evaluate(page, 'window.neoChatView.current()?.messages.some(m=>m.content==="Packaged Mac reply.")'), 'saved chat after reopening');
+  console.log('Checking normal window close and Dock reactivation.');
+  await evaluate(main, "process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/index.html')).close(); undefined", false);
+  await until(() => evaluate(main, "process.mainModule.require('electron').BrowserWindow.getAllWindows().length === 0", false), 'workspace window close');
+  assert.equal(child.exitCode, null, 'Mac keeps running after a normal window close');
+  page.close();
+  await evaluate(main, "process.mainModule.require('electron').app.emit('activate'); undefined", false);
+  page = await target('index.html');
+  await until(() => evaluate(page, 'typeof library !== "undefined" && !!library'), 'reactivated workspace');
   await close();
   console.log('PASS: installed ARM64 app onboarding, Mac title-bar space, formatted writing, AI reply, settings, backup, and persistence.');
 })().catch(error => { console.error(error); console.error(log.slice(-12000)); process.exitCode = 1; })
