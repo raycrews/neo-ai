@@ -20,7 +20,7 @@ jobs:
         include:
           - os: windows-latest
             platform: win
-          - os: macos-latest
+          - os: macos-15
             platform: mac
           - os: ubuntu-22.04
             platform: linux
@@ -39,6 +39,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-0 libnss3 libasound2 libgbm1 libatk-bridge2.0-0 libfuse2 xvfb xauth dbus-x11 openbox weston
       - run: npm ci
+      - name: Verify Apple silicon runner
+        if: runner.os == 'macOS'
+        run: node -e "if(process.arch !== 'arm64') throw new Error('Apple silicon runner required'); console.log(process.platform, process.arch)"
       - run: npm test
       - name: Test detached windows (Windows and macOS)
         if: runner.os != 'Linux'
@@ -82,6 +85,7 @@ jobs:
         run: npm run package:appimage
       - name: Test packaged AppImage
         if: runner.os == 'Linux'
+        timeout-minutes: 6
         run: npm run test:appimage
       - name: Upload AppImage test screenshots
         if: runner.os == 'Linux' && always()
@@ -105,12 +109,29 @@ jobs:
           APPLE_TEAM_ID: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.APPLE_TEAM_ID || '' }}
         run: |
           if [[ -n "$CSC_LINK" && -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
-            npx electron-builder --mac --publish never
+            npm run package:mac -- --publish never
           else
             echo "Building unsigned development artifacts; configure Apple signing secrets for distribution."
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
-            CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --config.mac.notarize=false --publish never
+            CSC_IDENTITY_AUTO_DISCOVERY=false npm run package:mac -- --config.mac.notarize=false --publish never
           fi
+      - name: Test installed Apple silicon DMG
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: npm run test:packaged-mac
+      - name: Prepare Mac checksums and testing notes
+        if: runner.os == 'macOS'
+        working-directory: dist
+        run: |
+          shasum -a 256 *.dmg *.zip > SHA256SUMS-mac-arm64.txt
+          cp ../docs/MACOS.md README-MACOS.md
+      - name: Upload Mac test screenshots
+        if: runner.os == 'macOS' && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mac-test-results
+          path: dist/test-results/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: neo-ai-${{ matrix.platform }}
@@ -121,6 +142,8 @@ jobs:
             dist/*.zip
             dist/*.AppImage
             dist/SHA256SUMS-linux-x64.txt
+            dist/SHA256SUMS-mac-arm64.txt
+            dist/README-MACOS.md
             dist/*.yml
             dist/*.blockmap
 
@@ -148,6 +171,7 @@ jobs:
         env:
           DEBUG: '@malept/flatpak-bundler'
       - name: Install and test packaged Flatpak
+        timeout-minutes: 6
         run: |
           flatpak install --user --noninteractive -y --bundle dist/*.flatpak
           bash scripts/test-flatpak-displays.sh

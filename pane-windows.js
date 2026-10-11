@@ -17,8 +17,10 @@ function restoredBounds(saved, displays) {
   return bounds;
 }
 
-function installPaneWindows({ BrowserWindow, ipcMain, screen, readSettings, writeSettings, dialog }) {
+function installPaneWindows({ app, BrowserWindow, ipcMain, screen, readSettings, writeSettings, dialog }) {
   let owner = null;
+  let quitRequested = false;
+  app.on('before-quit', () => { quitRequested = true; });
   let snapshot = null;
   let sequence = 0;
   let tail = Promise.resolve();
@@ -207,8 +209,12 @@ function installPaneWindows({ BrowserWindow, ipcMain, screen, readSettings, writ
           }
           await enqueue({ type: 'flush' });
           permitted = true;
-          win.close();
+          // Preventing close while saves finish also cancels Electron's quit.
+          // Resume that request; a normal Mac window close must stay separate.
+          if (quitRequested) app.quit();
+          else win.close();
         } catch (error) {
+          quitRequested = false;
           await dialog.showMessageBox(win, { type: 'warning', message: 'Workspace kept open', detail: error.message });
         } finally { preparing = false; }
       });
