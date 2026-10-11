@@ -51,6 +51,17 @@ dialog.showMessageBox = async (options) => {
 require('../main');
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function capture(win) {
+  // macOS CI can transiently reject capture while a resized surface settles.
+  // Retry only that compositor error; assertions and other errors still fail.
+  for (let attempt = 0; ; attempt++) {
+    try { return await win.webContents.capturePage(); }
+    catch (error) {
+      if (process.platform !== 'darwin' || !String(error).includes('UnknownVizError') || attempt >= 2) throw error;
+      win.showInactive(); await pause(500);
+    }
+  }
+}
 async function until(check, label) {
   const deadline = Date.now() + 12000;
   while (Date.now() < deadline) {
@@ -137,10 +148,10 @@ app.whenReady().then(async () => {
   owner.setSize(900, 700);
   await evaluate(owner, 'document.querySelector("#paper-scroll").scrollTop = 0');
   await pause(150);
-  fs.writeFileSync(path.join(scratch, 'workspace-small.png'), (await owner.webContents.capturePage()).toPNG());
+  fs.writeFileSync(path.join(scratch, 'workspace-small.png'), (await capture(owner)).toPNG());
   owner.setSize(1280, 860);
   await pause(300);
-  fs.writeFileSync(path.join(scratch, 'workspace.png'), (await owner.webContents.capturePage()).toPNG());
+  fs.writeFileSync(path.join(scratch, 'workspace.png'), (await capture(owner)).toPNG());
   console.log('Workspace screenshot: ' + path.join(scratch, 'workspace.png'));
   check('sidebar chapter navigation, reorder, collapse, and device preferences');
   await evaluate(owner, 'detachOutline()');
@@ -230,7 +241,7 @@ app.whenReady().then(async () => {
   // Wait for the resized native surface before requesting a screenshot.
   pane.showInactive();
   await pause(300);
-  const image = await pane.webContents.capturePage();
+  const image = await capture(pane);
   fs.writeFileSync(path.join(scratch, 'outline.png'), image.toPNG());
   console.log('Screenshot: ' + path.join(scratch, 'outline.png'));
   async function nameNewItem(name) {
@@ -326,9 +337,9 @@ app.whenReady().then(async () => {
   assert.equal(await evaluate(owner, `WorkspaceTree.find(book.workspaceTree.manuscript, '${chapterFolder}').node.children[0].id`), sceneId);
   await evaluate(owner, `openWorkspaceNode('manuscript', '${actId}')`);
   owner.setSize(1500, 1050);
-  await owner.webContents.capturePage();
+  await capture(owner);
   await pause(600);
-  fs.writeFileSync(path.join(scratch, 'workspace-tree.png'), (await owner.webContents.capturePage()).toPNG());
+  fs.writeFileSync(path.join(scratch, 'workspace-tree.png'), (await capture(owner)).toPNG());
   console.log('Tree screenshot: ' + path.join(scratch, 'workspace-tree.png'));
   await evaluate(owner, 'switchTab("manuscript")');
   await evaluate(owner, 'focusChapter("ch-one")');
@@ -436,7 +447,7 @@ app.whenReady().then(async () => {
   assert.equal(meta().chapterTitles[sceneId], 'Renamed scene');
   await menuFor(chapterFolder, ['New folder', 'New document', 'Edit', 'Delete']);
   await pause(200);
-  fs.writeFileSync(path.join(scratch, 'workspace-menu.png'), (await owner.webContents.capturePage()).toPNG());
+  fs.writeFileSync(path.join(scratch, 'workspace-menu.png'), (await capture(owner)).toPNG());
   console.log('Menu screenshot: ' + path.join(scratch, 'workspace-menu.png'));
   await evaluate(owner, 'closeTreeMenu()');
   check('exact menus, double-click rename, nested creation, cancel/delete, text recovery and undo');
@@ -475,9 +486,9 @@ app.whenReady().then(async () => {
   await evaluate(owner, 'openBook("book-test")');
   assert.deepEqual(await contextMenu('manuscript','ch-one'), {checked:'false',disabled:false});
   assert.deepEqual(await contextMenu('manuscript',sceneId), {checked:'false',disabled:false});
-  await owner.webContents.capturePage();
+  await capture(owner);
   await pause(200);
-  fs.writeFileSync(path.join(scratch,'context-menu.png'),(await owner.webContents.capturePage()).toPNG());
+  fs.writeFileSync(path.join(scratch,'context-menu.png'),(await capture(owner)).toPNG());
   await evaluate(owner,'closeTreeMenu()');
   check('AI context menu state, folder exclusion, Darlings exclusion, moves, reopen persistence and cover context filtering');
   // Exercise the actual File menu path with dialogs and process exit stubbed.

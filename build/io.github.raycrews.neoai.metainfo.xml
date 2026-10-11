@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.raycrews.neoai</id>
+  <name>Neo-AI</name>
+  <summary>A word processor for authors</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <developer id="io.github.raycrews"><name>Neo-AI contributors</name></developer>
+  <description>
+    <p>Write and organize books with chapters, character notes, research, and optional AI assistance. Connect your own local or online AI provider.</p>
+    <p>Your writing stays in ordinary files. Export finished work to PDF, EPUB, HTML, DOCX, or plain text, and protect your library with backups.</p>
+  </description>
+  <launchable type="desktop-id">io.github.raycrews.neoai.desktop</launchable>
+  <url type="homepage">https://github.com/raycrews/neo-ai</url>
+  <url type="bugtracker">https://github.com/raycrews/neo-ai/issues</url>
+  <categories><category>Office</category><category>WordProcessor</category></categories>
+  <releases><release version="0.9.50" date="2026-10-05"/></releases>
+  <content_rating type="oars-1.1"/>
+</component>
