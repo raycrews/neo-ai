@@ -8,8 +8,10 @@ const asar = require('@electron/asar');
 const http = require('node:http');
 const version = require('../package.json').version;
 const flatpak = process.argv[2] === '--flatpak';
-const nativeWayland = flatpak && process.argv.includes('--wayland');
-const x11Session = flatpak && process.argv.includes('--x11');
+const nativeWayland = process.argv.includes('--wayland');
+const x11Session = process.argv.includes('--x11');
+const displayTest = nativeWayland || x11Session || process.argv.includes('--stale-wayland');
+const displayLabel = nativeWayland ? 'wayland' : x11Session ? 'x11' : 'stale-wayland';
 const appId = 'io.github.raycrews.neoai';
 const label = flatpak ? 'Flatpak' : 'AppImage';
 const image = path.resolve(process.argv[2] || `dist/Neo-AI-${version}-linux-x86_64.AppImage`);
@@ -82,13 +84,12 @@ const provider = http.createServer(async (req, res) => {
 async function launch() {
   log = ''; let endpoint;
   const flags = ['--remote-debugging-port=0', '--disable-dev-shm-usage'];
-  // Flatpak must select a permitted display backend in its own launcher.
-  // Supplying x11 here would hide failures on Wayland desktops such as Pop!_OS.
-  if (!flatpak) flags.push('--ozone-platform=x11');
-  if (flatpak) flags.push('--inspect=0', '--user-data-dir=' + path.join(config, 'Neo-AI'));
+  // Both packages must select a display in their own launcher. Forcing x11
+  // here would hide startup failures on Wayland desktops such as Pop!_OS.
+  flags.push('--inspect=0', '--user-data-dir=' + path.join(config, 'Neo-AI'));
   const isolated = { HOME: home, XDG_CONFIG_HOME: config,
     XDG_DATA_HOME: path.join(home, '.local/share'), XDG_CACHE_HOME: path.join(home, '.cache'),
-    ...(flatpak ? { XDG_SESSION_TYPE: x11Session ? 'x11' : 'wayland',
+    ...(flatpak || displayTest ? { XDG_SESSION_TYPE: x11Session ? 'x11' : 'wayland',
       WAYLAND_DISPLAY: nativeWayland ? process.env.WAYLAND_DISPLAY : 'neo-test-unavailable-wayland' } : {}) };
   // Flatpak itself uses the build user's installation; only the application gets
   // this temporary profile. Neither package can touch a writer's settings/books.
@@ -105,12 +106,13 @@ async function launch() {
     if (child.exitCode !== null) throw new Error(label + ' exited: ' + log);
     return endpoint;
   }, 'packaged startup');
-  if (flatpak) {
+  if (flatpak || displayTest) {
     const mainEndpoint = log.match(/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/)?.[1];
     assert.ok(mainEndpoint, 'test main-process inspector');
     const main = await connect(mainEndpoint);
     try {
       assert.equal(await evaluate(main, "process.mainModule.require('electron').app.commandLine.getSwitchValue('ozone-platform')", false), nativeWayland ? 'wayland' : 'x11');
+      assert.equal(await evaluate(main, "process.mainModule.require('electron').app.commandLine.hasSwitch('no-sandbox')", false), false, 'sandbox is enabled in packaged tests');
       if (nativeWayland) assert.equal(await evaluate(main, '!!process.env.DISPLAY', false), false, 'native Wayland test has no X11 display');
     } finally { main.close(); }
     console.log('PASS: packaged display selection: ' + (nativeWayland ? 'native Wayland without X11' : x11Session ? 'X11 session' : 'X11 fallback with stale Wayland session variables'));
@@ -153,7 +155,7 @@ async function close() {
   await until(() => evaluate(page, 'window.neoChatView.current().messages.some(m=>m.role==="assistant" && m.content==="Packaged network reply.") && !window.neoChatView.state.job'), 'streamed AI reply');
   fs.mkdirSync('dist/test-results', { recursive: true });
   const screenshot = await page.send('Page.captureScreenshot');
-  fs.writeFileSync(`dist/test-results/${label.toLowerCase()}.png`, Buffer.from(screenshot.data, 'base64'));
+  fs.writeFileSync(`dist/test-results/${label.toLowerCase()}-${displayLabel}.png`, Buffer.from(screenshot.data, 'base64'));
   const libraryDir = await evaluate(page, 'window.neo.libraryPath()');
   assert.ok(libraryDir.startsWith(home + path.sep), 'library isolated');
   await close();
@@ -164,9 +166,9 @@ async function close() {
   assert.equal(await evaluate(page, 'window.neoAppearance.read().then(v=>v.theme)'), 'light');
   assert.equal(await evaluate(page, 'window.neo.shortcuts().then(rows=>rows.find(r=>r.id==="searchBook").accelerator)'), 'Control+Shift+G');
   assert.ok(fs.readdirSync(path.join(libraryDir, 'Backups')).some(file => file.endsWith('.zip')));
-  if (flatpak) {
+  if (flatpak || displayTest) {
     // Exercise the real Settings -> Browse -> app.relaunch path. Only the OS
-    // picker is replaced; app exit and Zypak restart are real packaged processes.
+    // picker is replaced; app exit and restart are real packaged processes.
     const nextLibrary = path.join(scratch, 'second library'); fs.mkdirSync(nextLibrary);
     const mainEndpoint = log.match(/Debugger listening on (ws:\/\/127\.0\.0\.1:\d+\/[^\s]+)/)?.[1];
     assert.ok(mainEndpoint, 'test main-process inspector');
@@ -188,14 +190,14 @@ async function close() {
       if (!fs.existsSync(activePort)) return null;
       const [port, endpoint] = fs.readFileSync(activePort, 'utf8').trim().split('\n');
       return port && endpoint ? `ws://127.0.0.1:${port}${endpoint}` : null;
-    }, 'automatic Flatpak restart');
+    }, 'automatic ' + label + ' restart');
     target = await attach(restarted);
     assert.equal(await evaluate(page, 'window.neo.libraryPath()'), nextLibrary);
     assert.ok(fs.existsSync(path.join(libraryDir, id, 'chapters/chapter-test.html')), 'original writing remains');
-    console.log('PASS: Flatpak library switch automatically restarts through Zypak.');
+    console.log('PASS: ' + label + ' library switch automatically restarts through its launcher.');
   }
   await close();
   console.log('PASS: host AI connection through package network permissions.');
   console.log('PASS: packaged ' + label + ' first run, onboarding, formatted book, settings, backup, and persistence after restart. Sandbox enabled.');
-})().catch(error => { console.error(error); console.error(log); process.exitCode = 1; })
+})().catch(error => { console.error(error.message.slice(-12000)); console.error(log.slice(-12000)); process.exitCode = 1; })
   .finally(() => { provider.close(); page?.close(); browser?.close(); if (child && child.exitCode === null) child.kill('SIGTERM'); });
