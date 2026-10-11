@@ -11,7 +11,8 @@ const version = require('../package.json').version;
 assert.equal(process.platform, 'darwin', 'Run on a Mac');
 assert.equal(process.arch, 'arm64', 'Run natively on Apple silicon');
 const dmg = path.resolve(`dist/Neo-AI-${version}-mac-arm64.dmg`);
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'neo-packaged-mac-'));
+// macOS resolves /var to /private/var when reporting Chromium's profile path.
+const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'neo-packaged-mac-')));
 const volume = path.join(scratch, 'volume');
 const installed = path.join(scratch, 'Applications', 'Neo-AI.app');
 const profile = path.join(scratch, 'device');
@@ -163,5 +164,6 @@ async function close() {
     clearTimeout(watchdog);
     provider.close(); page?.close(); main?.close();
     if (child && child.exitCode === null) child.kill('SIGKILL');
+    child?.stdout.destroy(); child?.stderr.destroy(); child?.unref();
     if (mounted) execFileSync('hdiutil', ['detach', '-force', volume], { timeout: 15000 });
   });
