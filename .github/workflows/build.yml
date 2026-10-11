@@ -85,6 +85,7 @@ jobs:
         run: npm run package:appimage
       - name: Test packaged AppImage
         if: runner.os == 'Linux'
+        timeout-minutes: 6
         run: npm run test:appimage
       - name: Upload AppImage test screenshots
         if: runner.os == 'Linux' && always()
@@ -170,6 +171,7 @@ jobs:
         env:
           DEBUG: '@malept/flatpak-bundler'
       - name: Install and test packaged Flatpak
+        timeout-minutes: 6
         run: |
           flatpak install --user --noninteractive -y --bundle dist/*.flatpak
           bash scripts/test-flatpak-displays.sh

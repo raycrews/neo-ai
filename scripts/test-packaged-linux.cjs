@@ -34,8 +34,10 @@ async function until(fn, label, timeout = 45000) {
   while (Date.now() < end) { const result = await fn(); if (result) return result; await pause(100); }
   throw new Error('Timed out: ' + label);
 }
+const sockets = new Set();
 async function connect(url) {
-  const socket = new WebSocket(url); await once(socket, 'open');
+  const socket = new WebSocket(url); sockets.add(socket); await once(socket, 'open');
+  socket.addEventListener('close', () => sockets.delete(socket));
   let sequence = 0; const pending = new Map();
   socket.addEventListener('message', event => {
     const message = JSON.parse(event.data), waiter = pending.get(message.id);
@@ -62,7 +64,9 @@ async function attach(endpoint) {
   browser = await connect(endpoint);
   async function target(file) {
     const item = await until(async () => (await (await fetch(http + '/json/list')).json()).find(row => row.type === 'page' && row.url.endsWith('/' + file)), file);
-    return connect(item.webSocketDebuggerUrl);
+    const client = await connect(item.webSocketDebuggerUrl);
+    await until(() => evaluate(client, 'document.readyState === "complete" && !!window.' + (file === 'settings.html' ? 'settingsAPI' : 'neo')), file + ' ready');
+    return client;
   }
   page = await target('index.html');
   await until(() => evaluate(page, 'typeof library !== "undefined" && !!library'), 'library loaded');
@@ -200,4 +204,9 @@ async function close() {
   console.log('PASS: host AI connection through package network permissions.');
   console.log('PASS: packaged ' + label + ' first run, onboarding, formatted book, settings, backup, and persistence after restart. Sandbox enabled.');
 })().catch(error => { console.error(error.message.slice(-12000)); console.error(log.slice(-12000)); process.exitCode = 1; })
-  .finally(() => { provider.close(); page?.close(); browser?.close(); if (child && child.exitCode === null) child.kill('SIGTERM'); });
+  .finally(() => {
+    provider.close();
+    for (const socket of sockets) socket.close();
+    if (child && child.exitCode === null) child.kill('SIGKILL');
+    child?.stdout.destroy(); child?.stderr.destroy(); child?.unref();
+  });

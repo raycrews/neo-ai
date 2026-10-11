@@ -88,7 +88,9 @@ async function launch() {
   const address = endpoint.replace('ws:', 'http:').split('/devtools/')[0];
   async function target(file) {
     const item = await until(async () => (await (await fetch(address + '/json/list')).json()).find(row => row.type === 'page' && row.url.endsWith('/' + file)), file);
-    return connect(item.webSocketDebuggerUrl);
+    const client = await connect(item.webSocketDebuggerUrl);
+    await until(() => evaluate(client, 'document.readyState === "complete" && !!window.' + (file === 'settings.html' ? 'settingsAPI' : 'neo')), file + ' ready');
+    return client;
   }
   page = await target('index.html');
   await until(() => evaluate(page, 'typeof library !== "undefined" && !!library'), 'library loaded');
