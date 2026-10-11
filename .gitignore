@@ -23,3 +23,53 @@ pocket/www/fonts/
 
 # working files beside the repo, never part of it
 Claude outputs/
+
+# Personal Neo-AI libraries, device profiles, credentials, and copies
+NEO Library/
+Neo-AI Library/
+Neo-AI Library-*/
+book-*/
+Backups/
+Exports/
+userData/
+profiles/
+.aws/
+.ssh/
+library.json
+book.json
+ai-chats.json
+darlings.json
+stickies.json
+art.json
+settings.json
+secrets.json
+ai-connections.json
+ai-assistants.json
+instruction-library.json
+profile-location.json
+fresh-setup-request
+library.json.*
+book.json.*
+ai-chats.json.*
+darlings.json.*
+stickies.json.*
+art.json.*
+settings.json.*
+secrets.json.*
+ai-connections.json.*
+ai-assistants.json.*
+instruction-library.json.*
+profile-location.json.*
+fresh-setup-request.*
+.env
+.env.*
+neo-backup-*.zip
+neo-manual-*.zip
+*.p12
+*.pfx
+*.key
+*.pem
+*.keystore
+id_rsa*
+id_ed25519*
+id_ecdsa*
