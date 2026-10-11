@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 module.exports = async function afterPack(context) {
+  await require('./privacy-check.cjs').checkPackage(context.appOutDir);
   if (context.electronPlatformName !== 'linux' ||
       !context.targets.some(target => target.name.toLowerCase() === 'appimage')) return;
   const executable = path.join(context.appOutDir, 'neo-ai');

@@ -6,10 +6,23 @@ const path = require('node:path');
 const net = require('node:net');
 const { execFileSync } = require('node:child_process');
 const afterPack = require('../build/after-pack.cjs');
+const asar = require('@electron/asar');
 
-test('AppImage hook leaves Windows, macOS, and Flatpak packaging alone', async () => {
+async function addArchive(root) {
+  const source = path.join(root, 'fixture-source');
+  await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'main.js'), '// fixture');
+  await asar.createPackage(source, path.join(root, 'app.asar'));
+  await fs.rm(source, { recursive: true });
+}
+
+test('packaging hook checks Windows, macOS, and Flatpak without adding an AppImage launcher', async t => {
+  const appOutDir = await fs.mkdtemp(path.join(os.tmpdir(), 'neo-hook-'));
+  t.after(() => fs.rm(appOutDir, { recursive: true, force: true }));
+  await addArchive(appOutDir);
   for (const [electronPlatformName, name] of [['win32', 'nsis'], ['darwin', 'dmg'], ['linux', 'flatpak']]) {
-    await afterPack({ electronPlatformName, targets: [{ name }], appOutDir: 'must-not-be-accessed' });
+    await afterPack({ electronPlatformName, targets: [{ name }], appOutDir });
+    assert.deepEqual(await fs.readdir(appOutDir), ['app.asar']);
   }
 });
 
@@ -19,6 +32,7 @@ test('packaged AppImage launcher selects a real display and preserves user argum
     t.after(() => fs.rm(root, { recursive: true, force: true }));
     const appOutDir = path.join(root, "App's folder");
     await fs.mkdir(appOutDir);
+    await addArchive(appOutDir);
     await fs.writeFile(path.join(appOutDir, 'neo-ai'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
     await afterPack({ electronPlatformName: 'linux', targets: [{ name: 'appImage' }], appOutDir });
     const launch = (env, args = []) => execFileSync(path.join(appOutDir, 'neo-ai'), args, {

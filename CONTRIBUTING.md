@@ -26,6 +26,11 @@ Books are folders of plain files in `~/Documents/NEO Library`: `book.json` for m
 
 ## Practical bits
 
+- Keep real books, chats, device profiles, credentials, and exports outside the checkout. Tests should create synthetic data in temporary directories.
+- Run `npm run check:privacy` before committing. It checks tracked and staged filenames, including files added with `git add -f`. `npm test` also runs it, and GitHub checks every push and pull request.
+- Packaging repeats the Git check and inspects the output, including ASAR archives, unpacked files, and loose resources, before producing installers. To check an unpacked build manually, run `node build/privacy-check.cjs --package dist/win-unpacked` (or the corresponding Linux/macOS output directory).
+- These filename checks prevent known Neo-AI data files from being included. They do not detect arbitrary prose or credentials pasted into source code, renamed exports, or information already in Git history. Review staged diffs before pushing. Update the exclusions and privacy tests when adding a new saved-data format.
+
 - Run from source: `npm install && npm start` (needs Node.js).
 - Keep PRs focused — one feature or fix each.
 - Describe the writer-facing behavior in your PR, not just the code. Think like an author, not a programmer!
