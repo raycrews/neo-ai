@@ -11,8 +11,8 @@ Extract the artifact ZIP into a folder you own, then run:
 
 ```bash
 sha256sum -c SHA256SUMS-linux-x64.txt
-chmod +x Neo-AI-0.9.47-linux-x86_64.AppImage
-./Neo-AI-0.9.47-linux-x86_64.AppImage
+chmod +x Neo-AI-0.9.51-linux-x86_64.AppImage
+./Neo-AI-0.9.51-linux-x86_64.AppImage
 ```
 
 The AppImage includes Neo-AI, Electron, and the application fonts. Node.js is not
@@ -22,12 +22,18 @@ such as `~/Applications`, so it remains available when Neo-AI restarts.
 If the runtime reports that FUSE is unavailable, use its extraction fallback:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./Neo-AI-0.9.47-linux-x86_64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./Neo-AI-0.9.51-linux-x86_64.AppImage
 ```
 
 Do not disable Chromium's sandbox to work around a startup failure. Record the
 terminal error, distribution, desktop session (Wayland/X11), and package version
 in a bug report. Sandboxing policies differ among Linux distributions.
+
+Starting with 0.9.51, the AppImage launcher uses native Wayland when its display
+socket exists and selects X11 otherwise. This also applies when Neo-AI restarts
+after changing libraries. A stale Wayland session variable no longer prevents
+startup on an available X11 display. An explicit `--ozone-platform=x11` or
+`--ozone-platform=wayland` argument takes precedence over automatic selection.
 
 ## Libraries and settings
 
@@ -68,9 +74,12 @@ The resulting file is placed in `dist/`.
 
 The workflow uses Ubuntu 22.04 for its x64 Linux job, installs desktop libraries,
 runs unit and Electron integration tests, then builds and tests the actual
-AppImage. The packaged test uses an isolated home and checks first run, formatted
-writing, settings, backups, and persistence after reopening. It uses the runtime's
-extraction fallback under Xvfb with Chromium's sandbox enabled.
+AppImage. Run `npm run test:appimage` with Xvfb, Weston, and dbus-run-session
+installed. The packaged tests use an isolated home and check first run, formatted
+writing, AI replies, settings, backups, persistence, and library-switch restart.
+They exercise X11, native Wayland without X11, and X11 with stale Wayland session
+variables, without forcing a display backend through test arguments. They use
+the runtime's extraction fallback and assert that Chromium's sandbox is enabled.
 
 Build jobs have read-only repository access. Actions are pinned to upstream
 commit hashes, and PR builds do not receive signing secrets. Downloadable build

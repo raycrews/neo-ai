@@ -37,7 +37,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-0 libnss3 libasound2 libgbm1 libatk-bridge2.0-0 libfuse2 xvfb xauth dbus-x11 openbox
+          sudo apt-get install -y libgtk-3-0 libnss3 libasound2 libgbm1 libatk-bridge2.0-0 libfuse2 xvfb xauth dbus-x11 openbox weston
       - run: npm ci
       - run: npm test
       - name: Test detached windows (Windows and macOS)
@@ -82,7 +82,7 @@ jobs:
         run: npm run package:appimage
       - name: Test packaged AppImage
         if: runner.os == 'Linux'
-        run: dbus-run-session -- xvfb-run -a npm run test:appimage
+        run: npm run test:appimage
       - name: Upload AppImage test screenshots
         if: runner.os == 'Linux' && always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

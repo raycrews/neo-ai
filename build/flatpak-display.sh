@@ -1,6 +1,6 @@
 #!/bin/sh
 # Choose a display before Electron initializes Ozone. Session variables alone
-# can name a Wayland display that Flatpak has not exposed inside the sandbox.
+# can name a Wayland display that is unavailable (including inside Flatpak).
 display=${WAYLAND_DISPLAY:-wayland-0}
 case "$display" in
   /*) socket=$display ;;
